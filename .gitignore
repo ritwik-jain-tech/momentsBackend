@@ -12,6 +12,7 @@ target/
 *.iml
 *.ipr
 
+src/main/resources/serviceAccountKey.json
 
 
 ### Eclipse ###

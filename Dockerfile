@@ -1,13 +1,29 @@
-# Use a base image with Java 17
-FROM eclipse-temurin:17-jdk-alpine
+# Stage 1: Build the application
+FROM maven:3.8.7-eclipse-temurin-17 AS build
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the jar file of your Spring Boot app to the container
-COPY target/momentsBackend-1.0-SNAPSHOT.jar app.jar
+# Copy the pom.xml and download dependencies only (caching dependencies if unchanged)
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
-# Expose port 8080
+# Copy the rest of the project files
+COPY src src
+
+# Package the application as a JAR file
+RUN mvn package -DskipTests
+
+# Stage 2: Create the runtime image
+FROM eclipse-temurin:17-jdk
+
+# Set the working directory
+WORKDIR /app
+
+# Copy only the built JAR file from the build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose the application port
 EXPOSE 8080
 
 # Run the application
