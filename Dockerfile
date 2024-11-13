@@ -5,7 +5,7 @@ FROM eclipse-temurin:17-jdk-alpine
 WORKDIR /app
 
 # Copy the jar file of your Spring Boot app to the container
-COPY target/momentsBackend.jar app.jar
+COPY target/momentsBackend-1.0-SNAPSHOT.jar app.jar
 
 # Expose port 8080
 EXPOSE 8080
