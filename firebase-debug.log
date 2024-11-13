@@ -1,0 +1,54 @@
+[debug] [2024-11-03T16:05:55.838Z] ----------------------------------------------------------------------
+[debug] [2024-11-03T16:05:55.839Z] Command:       /opt/homebrew/Cellar/node/17.0.1/bin/node /usr/local/bin/firebase init functions
+[debug] [2024-11-03T16:05:55.839Z] CLI Version:   9.21.0
+[debug] [2024-11-03T16:05:55.839Z] Platform:      darwin
+[debug] [2024-11-03T16:05:55.839Z] Node Version:  v17.0.1
+[debug] [2024-11-03T16:05:55.842Z] Time:          Sun Nov 03 2024 21:35:55 GMT+0530 (India Standard Time)
+[debug] [2024-11-03T16:05:55.842Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2024-11-03T16:05:55.845Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2024-11-03T16:05:55.846Z] > authorizing via signed-in user (moments.live.weddings@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /Users/apple/IdeaProjects/momentsBackend
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
+[debug] [2024-11-03T16:06:00.320Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=100
+[debug] [2024-11-03T16:06:01.612Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2024-11-03T16:06:01.613Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[info] i  Using project moments-38b77 (moments) 
+[info] 
+=== Functions Setup
+[info] 
+[info] A functions directory will be created in your project with sample code
+[info] pre-configured. Functions can be deployed with firebase deploy.
+[info] 
+[debug] [2024-11-03T16:06:03.086Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2024-11-03T16:06:03.086Z] > authorizing via signed-in user (moments.live.weddings@gmail.com)
+[debug] [2024-11-03T16:06:03.087Z] [iam] checking project moments-38b77 for permissions ["firebase.projects.get"]
+[debug] [2024-11-03T16:06:03.102Z] > refreshing access token with scopes: ["email","https://www.googleapis.com/auth/cloud-platform","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","openid"]
+[debug] [2024-11-03T16:06:03.105Z] >>> HTTP REQUEST POST https://www.googleapis.com/oauth2/v3/token  
+ <request body omitted>
+[debug] [2024-11-03T16:06:03.590Z] <<< HTTP RESPONSE 200 {"pragma":"no-cache","expires":"Mon, 01 Jan 1990 00:00:00 GMT","date":"Sun, 03 Nov 2024 16:06:03 GMT","cache-control":"no-cache, no-store, max-age=0, must-revalidate","content-type":"application/json; charset=utf-8","vary":"X-Origin, Referer, Origin,Accept-Encoding","server":"scaffolding on HTTPServer2","x-xss-protection":"0","x-frame-options":"SAMEORIGIN","x-content-type-options":"nosniff","alt-svc":"h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000","accept-ranges":"none","transfer-encoding":"chunked"}
+[debug] [2024-11-03T16:06:03.604Z] >>> HTTP REQUEST POST https://cloudresourcemanager.googleapis.com/v1/projects/moments-38b77:testIamPermissions  
+ {"permissions":["firebase.projects.get"]}
+[debug] [2024-11-03T16:06:05.702Z] <<< HTTP RESPONSE 200 {"content-type":"application/json; charset=UTF-8","vary":"X-Origin, Referer, Origin,Accept-Encoding","date":"Sun, 03 Nov 2024 16:06:05 GMT","server":"ESF","cache-control":"private","x-xss-protection":"0","x-frame-options":"SAMEORIGIN","x-content-type-options":"nosniff","server-timing":"gfet4t7; dur=1328","alt-svc":"h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000","accept-ranges":"none","transfer-encoding":"chunked"}
+[debug] [2024-11-03T16:06:05.703Z] >>> HTTP REQUEST POST https://serviceusage.googleapis.com/v1/projects/moments-38b77/services/cloudfunctions.googleapis.com:enable  
+ 
+[debug] [2024-11-03T16:06:05.704Z] >>> HTTP REQUEST POST https://serviceusage.googleapis.com/v1/projects/moments-38b77/services/runtimeconfig.googleapis.com:enable  
+ 
+[debug] [2024-11-03T16:06:07.854Z] <<< HTTP RESPONSE 200 {"content-type":"application/json; charset=UTF-8","vary":"X-Origin, Referer, Origin,Accept-Encoding","date":"Sun, 03 Nov 2024 16:06:07 GMT","server":"ESF","cache-control":"private","x-xss-protection":"0","x-frame-options":"SAMEORIGIN","x-content-type-options":"nosniff","alt-svc":"h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000","accept-ranges":"none","transfer-encoding":"chunked"}
+[debug] [2024-11-03T16:06:07.856Z] <<< HTTP RESPONSE 200 {"content-type":"application/json; charset=UTF-8","vary":"X-Origin, Referer, Origin,Accept-Encoding","date":"Sun, 03 Nov 2024 16:06:07 GMT","server":"ESF","cache-control":"private","x-xss-protection":"0","x-frame-options":"SAMEORIGIN","x-content-type-options":"nosniff","alt-svc":"h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000","accept-ranges":"none","transfer-encoding":"chunked"}
