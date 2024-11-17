@@ -78,4 +78,9 @@ public class UserProfileController {
         }
         return userProfile==null? (ResponseEntity<UserProfile>) ResponseEntity.notFound() : ResponseEntity.ok(userProfile);
     }
+
+    @GetMapping("/hello/")
+    public ResponseEntity<String> getUserProfileByPhoneNumber() {
+        return  ResponseEntity.ok("Hello Moments");
+    }
 }
