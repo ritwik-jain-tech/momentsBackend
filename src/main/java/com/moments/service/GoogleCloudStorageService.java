@@ -22,10 +22,12 @@ public class GoogleCloudStorageService {
         String blobName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
 
         // Define the blob (object) metadata
-        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName).build();
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
+                .setContentType("image/jpeg").build();
 
         // Upload the file to the bucket
         Blob blob = storage.create(blobInfo, file.getBytes());
+
 
         // Return the public URL of the uploaded file
         return String.format("https://storage.googleapis.com/%s/%s", bucketName, blob.getName());
