@@ -1,6 +1,7 @@
 package com.moments.service;
 
 
+import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
@@ -20,15 +21,15 @@ public class GoogleCloudStorageService {
         // Create a unique filename for the uploaded file
         String blobName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
 
-        // Upload the file to GCS
-        BlobInfo blobInfo = storage.create(
-                BlobInfo.newBuilder(bucketName, blobName).build(),
-                file.getBytes(),
-                Storage.BlobTargetOption.predefinedAcl(PredefinedAcl.PUBLIC_READ)
-        );
+        // Define the blob (object) metadata
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName).build();
+
+        // Upload the file to the bucket
+        Blob blob = storage.create(blobInfo, file.getBytes());
 
         // Return the public URL of the uploaded file
-        return String.format("https://storage.googleapis.com/%s/%s", bucketName, blobName);
+        return String.format("https://storage.googleapis.com/%s/%s", bucketName, blob.getName());
+
     }
 }
 
