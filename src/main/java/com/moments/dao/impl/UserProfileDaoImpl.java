@@ -7,6 +7,8 @@ import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @Repository
@@ -21,12 +23,13 @@ public class UserProfileDaoImpl implements UserProfileDao {
     }
 
     @Override
-    public void createUserProfile(UserProfile userProfile) throws ExecutionException, InterruptedException {
+    public Long createUserProfile(UserProfile userProfile) throws ExecutionException, InterruptedException {
         Long userId = getNextUserId();
         userProfile.setUserId(String.valueOf(userId));
         DocumentReference docRef = db.collection(COLLECTION_NAME).document(userProfile.getUserId());
         ApiFuture<WriteResult> result = docRef.set(userProfile);
-        result.get(); // Wait for the operation to complete
+        result.get();// Wait for the operation to complete
+       return userId;
     }
     private synchronized Long getNextUserId() throws ExecutionException, InterruptedException {
         DocumentReference counterDocRef = db.collection("Counters").document("UserProfileCounter");
@@ -63,6 +66,42 @@ public class UserProfileDaoImpl implements UserProfileDao {
     }
 
     @Override
+    public List<UserProfile> getUserProfiles(List<String> userIds) throws ExecutionException, InterruptedException {
+        List<UserProfile> userProfiles = new ArrayList<>();
+
+        if (userIds == null || userIds.isEmpty()) {
+            return userProfiles; // Return an empty list if input is null or empty
+        }
+
+        try {
+            // Create document references for all userIds
+            List<DocumentReference> docRefs = new ArrayList<>();
+            for (String userId : userIds) {
+                docRefs.add(db.collection(COLLECTION_NAME).document(userId));
+            }
+
+            // Fetch all documents in a batch
+            ApiFuture<List<DocumentSnapshot>> future = db.getAll(docRefs.toArray(new DocumentReference[0]));
+            List<DocumentSnapshot> documents = future.get();
+
+            // Process each document
+            for (DocumentSnapshot document : documents) {
+                if (document.exists()) {
+                    UserProfile userProfile = document.toObject(UserProfile.class);
+                    if (userProfile != null) {
+                        userProfiles.add(userProfile);
+                    }
+                }
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            e.printStackTrace(); // Log the exception
+        }
+
+        return userProfiles;
+    }
+
+
+    @Override
     public void updateUserProfile(UserProfile userProfile) throws ExecutionException, InterruptedException {
         DocumentReference docRef = db.collection(COLLECTION_NAME).document(userProfile.getUserId());
         ApiFuture<WriteResult> result = docRef.set(userProfile);
@@ -74,6 +113,16 @@ public class UserProfileDaoImpl implements UserProfileDao {
         DocumentReference docRef = db.collection(COLLECTION_NAME).document(userId);
         ApiFuture<WriteResult> result = docRef.delete();
         result.get(); // Wait for the operation to complete
+    }
+
+    @Override
+    public UserProfile addUserToEvent(String userId, String eventId) throws ExecutionException, InterruptedException {
+        UserProfile userProfile = getUserProfile(userId);
+        if(userProfile!=null && !userProfile.getEventIds().contains(eventId)){
+            userProfile.getEventIds().add(eventId);
+            updateUserProfile(userProfile);
+        }
+        return userProfile;
     }
 
 

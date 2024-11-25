@@ -1,11 +1,23 @@
 package com.moments.models;
 
 
+import java.util.List;
+
 public class UserProfile {
     private String userId;
     private String phoneNumber;
     private String name;
     private Role role;
+    private List<String> eventIds;
+
+    public List<String> getEventIds() {
+        return eventIds;
+    }
+
+    public void setEventIds(List<String> eventIds) {
+        this.eventIds = eventIds;
+    }
+
 
     // Getters and setters
     public String getUserId() {
@@ -38,6 +50,17 @@ public class UserProfile {
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    @Override
+    public String toString() {
+        return "UserProfile{" +
+                "userId='" + userId + '\'' +
+                ", phoneNumber='" + phoneNumber + '\'' +
+                ", name='" + name + '\'' +
+                ", role=" + role +
+                ", eventIds=" + eventIds +
+                '}';
     }
 }
 

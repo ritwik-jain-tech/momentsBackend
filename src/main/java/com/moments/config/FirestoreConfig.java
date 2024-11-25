@@ -24,8 +24,8 @@ public class FirestoreConfig {
 
     @Bean
     public Firestore getFirestore() throws IOException {
-     //   InputStream serviceAccount = getClass().getClassLoader().getResourceAsStream("serviceAccountKey.json");
-      //  GoogleCredentials credentials = GoogleCredentials.fromStream(serviceAccount);
+      // InputStream serviceAccount = getClass().getClassLoader().getResourceAsStream("serviceAccountKey.json");
+      // GoogleCredentials credentials = GoogleCredentials.fromStream(serviceAccount);
         GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
 
         FirebaseOptions options = FirebaseOptions.builder()

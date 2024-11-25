@@ -4,8 +4,7 @@ package com.moments.models;
 import java.util.List;
 
 
-public class Events {
-
+public class Event {
 
     private String eventId;
     private String creatorId;
@@ -54,4 +53,9 @@ public class Events {
     public void setUserIds(List<String> userIds) {
         this.userIds = userIds;
     }
+
+    public int getMemberCount(){
+        return this.userIds.size();
+    }
+
 }
