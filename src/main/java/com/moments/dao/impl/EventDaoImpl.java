@@ -72,7 +72,8 @@ public class EventDaoImpl implements EventDao {
         try {
             Event event = getEventById(eventId);
             List<String> userIds = event.getUserIds();
-            if (!userIds.contains(userId)) {
+            if (userIds==null ||!userIds.contains(userId)) {
+                userIds = new ArrayList<>();
                 userIds.add(userId);
                 event.setUserIds(userIds);
                 saveEvent(event);

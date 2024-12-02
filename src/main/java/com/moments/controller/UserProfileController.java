@@ -23,7 +23,7 @@ public class UserProfileController {
 
     // Create a new user profile
     @PostMapping("/create")
-    public ResponseEntity<String> createUserProfile(@RequestBody UserProfile userProfile) {
+    public ResponseEntity<UserProfile> createUserProfile(@RequestBody UserProfile userProfile) {
         try {
             if(userProfile.getRole()==null){
                 userProfile.setRole(Role.USER);
@@ -32,20 +32,21 @@ public class UserProfileController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
             if(!isValidPhoneNumber(userProfile.getPhoneNumber())){
-                return new ResponseEntity<>("Invalid phone number. It must be a 10-digit number.", HttpStatus.BAD_REQUEST);
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
            UserProfile userProfileExisting = userProfileService.getUserProfileByPhoneNumber(userProfile.getPhoneNumber());
             if(userProfileExisting==null){
                 String userId = userProfileService.createUser(userProfile).toString();
+                userProfile.setUserId(userId);
                 userProfileService.addUserToEvent(userId, userProfile.getEventIds().get(0));
-                return ResponseEntity.status(HttpStatus.CREATED).body("User profile created successfully and added to event. userId "+ userId + ", eventId :"+  userProfile.getEventIds().get(0));
+                return ResponseEntity.status(HttpStatus.CREATED).body(userProfile);
             } else {
 
-                return ResponseEntity.status(HttpStatus.CONFLICT).body("User profile already exists:"+ userProfileExisting.toString());
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(userProfileExisting);
             }
 
         } catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error creating user profile: " + e.getMessage());
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -113,6 +114,12 @@ public class UserProfileController {
     }
         return ResponseEntity.ok(null);
     }
+
+
+
+
+
+
 
 
     private boolean isValidPhoneNumber(String phoneNumber) {
