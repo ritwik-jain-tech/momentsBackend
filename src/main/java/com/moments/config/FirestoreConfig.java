@@ -13,7 +13,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import static com.moments.config.CloudStorageConfig.ENV;
 
 @Configuration
 public class FirestoreConfig {
