@@ -1,13 +1,19 @@
 package com.moments.models;
 
+import org.springframework.http.HttpStatus;
+
 public class BaseResponse {
 
     String message;
-    Integer status;
 
-    public BaseResponse(String message, Integer status) {
+    HttpStatus status;
+
+    Object data;
+
+    public BaseResponse(String message, HttpStatus status, Object data) {
         this.message = message;
         this.status = status;
+        this.data = data;
     }
 
     public String getMessage() {
@@ -18,11 +24,13 @@ public class BaseResponse {
         this.message = message;
     }
 
-    public Integer getStatus() {
+    public HttpStatus getStatus() {
         return status;
     }
 
-    public void setStatus(Integer status) {
+    public void setStatus(HttpStatus status) {
         this.status = status;
     }
+    public Object getData() {return data;}
+    public void setData(Object data) {this.data = data;}
 }

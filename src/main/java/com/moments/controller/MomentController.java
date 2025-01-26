@@ -1,5 +1,6 @@
 package com.moments.controller;
 
+import com.moments.models.BaseResponse;
 import com.moments.models.Moment;
 import com.moments.models.MomentsRequest;
 import com.moments.models.MomentsResponse;
@@ -21,48 +22,38 @@ public class MomentController {
 
     // Create or Update a Moment
     @PostMapping
-    public ResponseEntity<?> createOrUpdateMoment(@RequestBody Moment moment) {
+    public ResponseEntity<BaseResponse> createOrUpdateMoment(@RequestBody Moment moment) {
         try {
             String result = momentService.saveMoment(moment);
-            return ResponseEntity.ok("Created Moment with ID :"+result);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Created moment with Id : "+result,HttpStatus.OK,moment));
+
         } catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error saving the moment: " + e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred: " + e.getMessage());
+           return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                   .body(new BaseResponse("Failed to create moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,moment));
         }
     }
 
     @PostMapping("/batch")
-    public ResponseEntity<?> createOrUpdateMoments(@RequestBody List<Moment> moments) {
+    public ResponseEntity<BaseResponse> createOrUpdateMoments(@RequestBody List<Moment> moments) {
         try {
             List<String> results = momentService.saveMoments(moments); // Implement this method in the service
-            return ResponseEntity.ok("Created Moments with IDs: " + String.join(", ", results));
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Created moment with IDs: " + results,HttpStatus.OK,null));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error saving the moments: " + e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred: " + e.getMessage());
+                    .body(new BaseResponse("Failed to create moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 
     // Get a Moment by ID
     @GetMapping("/{id}")
-    public ResponseEntity<?> getMomentById(@PathVariable String id) {
+    public ResponseEntity<BaseResponse> getMomentById(@PathVariable String id) {
         try {
             Moment moment = momentService.getMomentById(id);
-            return ResponseEntity.ok(moment);
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Moment with Id : "+id,HttpStatus.OK,moment));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error retrieving the moment: " + e.getMessage());
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Moment not found with ID: " + id);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred: " + e.getMessage());
+                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 
@@ -71,41 +62,33 @@ public class MomentController {
     public ResponseEntity<?> getAllMoments() {
         try {
             List<Moment> moments = momentService.getAllMoments();
-            return ResponseEntity.ok(moments);
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,moments));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error retrieving moments: " + e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred: " + e.getMessage());
+                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 
     @PostMapping("/feed")
-    public ResponseEntity<MomentsResponse> getMomentsFeed(@RequestBody MomentsRequest request){
+    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request){
         try {
             MomentsResponse response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor());
-            return ResponseEntity.ok(response);
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
         } catch (ExecutionException  | InterruptedException e){
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 
     // Delete a Moment by ID
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteMoment(@PathVariable String id) {
+    public ResponseEntity<BaseResponse> deleteMoment(@PathVariable String id) {
         try {
             momentService.deleteMoment(id);
-            return ResponseEntity.ok("Moment deleted successfully");
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,null));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error deleting the moment: " + e.getMessage());
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Moment not found with ID: " + id);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred: " + e.getMessage());
+                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 }

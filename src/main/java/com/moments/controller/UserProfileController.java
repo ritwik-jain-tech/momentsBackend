@@ -1,5 +1,6 @@
 package com.moments.controller;
 
+import com.moments.models.BaseResponse;
 import com.moments.models.Role;
 import com.moments.models.UserProfile;
 import com.moments.service.UserProfileService;
@@ -23,26 +24,26 @@ public class UserProfileController {
 
     // Create a new user profile
     @PostMapping("/create")
-    public ResponseEntity<UserProfile> createUserProfile(@RequestBody UserProfile userProfile) {
+    public ResponseEntity<BaseResponse> createUserProfile(@RequestBody UserProfile userProfile) {
         try {
             if(userProfile.getRole()==null){
                 userProfile.setRole(Role.USER);
             }
             if(userProfile.getEventIds()==null || userProfile.getEventIds().isEmpty()){
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new BaseResponse("EventId can not be null or empty",HttpStatus.BAD_REQUEST, null));
             }
             if(!isValidPhoneNumber(userProfile.getPhoneNumber())){
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new BaseResponse("Invalid Phone number",HttpStatus.BAD_REQUEST, null));
             }
            UserProfile userProfileExisting = userProfileService.getUserProfileByPhoneNumber(userProfile.getPhoneNumber());
             if(userProfileExisting==null){
                 String userId = userProfileService.createUser(userProfile).toString();
                 userProfile.setUserId(userId);
                 userProfileService.addUserToEvent(userId, userProfile.getEventIds().get(0));
-                return ResponseEntity.status(HttpStatus.CREATED).body(userProfile);
+                return ResponseEntity.status(HttpStatus.CREATED).body(new BaseResponse("Success", HttpStatus.CREATED, userProfile));
             } else {
-
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(userProfileExisting);
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(new BaseResponse("Success", HttpStatus.CONFLICT, userProfileExisting));
             }
 
         } catch (ExecutionException | InterruptedException e) {
@@ -52,74 +53,70 @@ public class UserProfileController {
 
     // Get user profile by userId
     @GetMapping("/{id}")
-    public ResponseEntity<UserProfile> getUserProfileById(@PathVariable String id) {
+    public ResponseEntity<BaseResponse> getUserProfileById(@PathVariable String id) {
         try {
             UserProfile userProfile = userProfileService.getUser(id);
             if (userProfile != null) {
-                return ResponseEntity.ok(userProfile);
+                return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, userProfile));
             } else {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new BaseResponse("Success", HttpStatus.NOT_FOUND, null));
             }
         } catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
     // Update an existing user profile
     @PutMapping("/update")
-    public ResponseEntity<String> updateUserProfile(@RequestBody UserProfile userProfile) {
+    public ResponseEntity<BaseResponse> updateUserProfile(@RequestBody UserProfile userProfile) {
         try {
             userProfileService.updateUser(userProfile);
-            return ResponseEntity.ok("User profile updated successfully.");
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, userProfile));
         } catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error updating user profile: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
     // Delete a user profile by userId
     @DeleteMapping("/delete")
-    public ResponseEntity<String> deleteUserProfile(@RequestParam String userId) {
+    public ResponseEntity<BaseResponse> deleteUserProfile(@RequestParam String userId) {
         try {
             userProfileService.deleteUser(userId);
-            return ResponseEntity.ok("User profile deleted successfully.");
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Deleted userId: "+userId, HttpStatus.OK, null));
         } catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error deleting user profile: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse("Error deleting : "+e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
     @GetMapping("/phone")
-    public ResponseEntity<UserProfile> getUserProfileByPhoneNumber(@RequestParam String phoneNumber) {
+    public ResponseEntity<BaseResponse> getUserProfileByPhoneNumber(@RequestParam String phoneNumber) {
         UserProfile userProfile = null;
         try {
             userProfile = userProfileService.getUserProfileByPhoneNumber(phoneNumber);
         } catch (ExecutionException  | InterruptedException e) {
-            throw new RuntimeException(e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
-        return userProfile==null? (ResponseEntity<UserProfile>) ResponseEntity.notFound() : ResponseEntity.ok(userProfile);
+        return userProfile==null? ResponseEntity.status(HttpStatus.NOT_FOUND).body(new BaseResponse("Success", HttpStatus.NOT_FOUND, null))
+                : ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, userProfile));
     }
 
     @GetMapping("/verify/otp")
-    public ResponseEntity<UserProfile> verifyOTP(@RequestParam String phoneNumber
+    public ResponseEntity<BaseResponse> verifyOTP(@RequestParam String phoneNumber
                                                     , @RequestParam String otp,
                                                  @RequestParam String eventId) {
         //TODO: Validate OTP
         String userIdFromOTP = "1";
         try {
             if (userIdFromOTP != null) {
-                return ResponseEntity.ok(userProfileService.addUserToEvent(userIdFromOTP, eventId));
+                UserProfile userProfile = userProfileService.addUserToEvent(userIdFromOTP, eventId);
+                return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, userProfile));
             }
         }catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
 
     }
         return ResponseEntity.ok(null);
     }
-
-
-
-
-
-
 
 
     private boolean isValidPhoneNumber(String phoneNumber) {

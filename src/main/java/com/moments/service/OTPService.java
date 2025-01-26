@@ -49,7 +49,7 @@ public class OTPService {
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
         body.add("userid", "2000193518");
         body.add("password", "vpYW6Z9A");
-        body.add("send_to", phoneNumber);
+        body.add("send_to", "+91"+phoneNumber);
         body.add("method", "sendMessage");
         body.add("msg", message);
         body.add("msg_type", "Text");

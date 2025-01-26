@@ -58,4 +58,8 @@ public class Event {
         return this.userIds.size();
     }
 
+    public void setMemberCount(int memberCount){
+
+    }
+
 }

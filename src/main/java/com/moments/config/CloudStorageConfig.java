@@ -1,33 +1,27 @@
 package com.moments.config;
 
 import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.firestore.Firestore;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
-import com.google.firebase.cloud.FirestoreClient;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import static com.moments.config.CloudStorageConfig.ENV;
-
 @Configuration
-public class FirestoreConfig {
+public class CloudStorageConfig {
 
     @Value("${spring.cloud.gcp.firestore.project-id}")
     private String projectId;
 
-    @Value("${firebase.credentials.path}")
-    private String credentialsPath;
-
     private static final String ENV ="PROD";
 
     @Bean
-    public Firestore getFirestore() throws IOException {
+   public  Storage getStorage() throws IOException {
+
+
         GoogleCredentials credentials;
         if(ENV.equals("PROD")) {
             credentials = GoogleCredentials.getApplicationDefault();
@@ -36,15 +30,10 @@ public class FirestoreConfig {
             credentials = GoogleCredentials.fromStream(serviceAccount);
         }
 
-        FirebaseOptions options = FirebaseOptions.builder()
+        return StorageOptions.newBuilder()
                 .setCredentials(credentials)
                 .setProjectId(projectId)
-                .build();
-
-        if (FirebaseApp.getApps().isEmpty()) {
-            FirebaseApp.initializeApp(options);
-        }
-
-        return FirestoreClient.getFirestore();
-    }
+                .build()
+                .getService();
+   }
 }
