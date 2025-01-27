@@ -8,6 +8,7 @@ public class OTPRequest {
     private int otp;
     private long timestamp;
     private Timestamp expiryTimestamp;
+    private String eventId;
 
     public Timestamp getExpiryTimestamp() {
         return expiryTimestamp;
@@ -15,6 +16,10 @@ public class OTPRequest {
 
     public void setExpiryTimestamp(Timestamp expiryTimestamp) {
         this.expiryTimestamp = expiryTimestamp;
+    }
+
+    public String getEventId() {
+        return eventId;
     }
 
     public OTPRequest(String phoneNumber, int otp, long timestamp, Timestamp expiryTimestamp) {

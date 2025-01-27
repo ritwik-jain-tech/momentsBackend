@@ -3,6 +3,7 @@ package com.moments.controller;
 
 
 import com.moments.models.BaseResponse;
+import com.moments.models.OTPRequest;
 import com.moments.models.OTPVerificationResponse;
 import com.moments.models.UserProfile;
 import com.moments.service.OTPService;
@@ -23,9 +24,9 @@ public class OTPController {
     private UserProfileService userProfileService;
 
     @PostMapping("/send")
-    public ResponseEntity<BaseResponse> sendOtp(@RequestParam String phoneNumber) {
+    public ResponseEntity<BaseResponse> sendOtp(@RequestBody OTPRequest otpRequest) {
         try {
-            otpService.sendOtp(phoneNumber);
+            otpService.sendOtp(otpRequest.getPhoneNumber());
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("OTP sent", HttpStatus.OK, null));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
@@ -33,9 +34,11 @@ public class OTPController {
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<BaseResponse> verifyOtp(@RequestParam String phoneNumber,
-                                                             @RequestParam int otp,
-                                                            @RequestParam String eventId) {
+    public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest) {
+        String phoneNumber = otpRequest.getPhoneNumber();
+        int otp =otpRequest.getOtp();
+        String eventId = otpRequest.getEventId();
+
         boolean isVerified = otpService.verifyOtp(phoneNumber, otp);
         if(isVerified){
             UserProfile userProfile = null;
