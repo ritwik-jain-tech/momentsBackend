@@ -72,8 +72,10 @@ public class EventDaoImpl implements EventDao {
         try {
             Event event = getEventById(eventId);
             List<String> userIds = event.getUserIds();
-            if (userIds==null ||!userIds.contains(userId)) {
+            if(userIds==null){
                 userIds = new ArrayList<>();
+            }
+            if (!userIds.contains(userId)) {
                 userIds.add(userId);
                 event.setUserIds(userIds);
                 saveEvent(event);
@@ -83,7 +85,7 @@ public class EventDaoImpl implements EventDao {
             e.printStackTrace();
             throw e;
         }
-        }
+    }
 
     @Override
     public List<String> getUserIdsInEvent(String eventId) throws ExecutionException, InterruptedException {

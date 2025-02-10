@@ -67,7 +67,8 @@ public class MomentService {
         List<Moment> moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
 
         int totalCount = momentDao.getTotalCount(creatorId, eventId);
-        Cursor cursorOut = new Cursor(totalCount, offset+moments.size(), limit, moments.get(moments.size()-1).getCreationTime());
+
+        Cursor cursorOut = new Cursor(totalCount, offset+moments.size(), limit, moments.get(moments.isEmpty()?0:moments.size()-1).getCreationTime());
         return new MomentsResponse(moments, cursorOut);
     }
 
