@@ -1,8 +1,6 @@
 package com.moments.controller;
 
-import com.moments.models.BaseResponse;
-import com.moments.models.Role;
-import com.moments.models.UserProfile;
+import com.moments.models.*;
 import com.moments.service.UserProfileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -118,6 +116,25 @@ public class UserProfileController {
         return ResponseEntity.ok(null);
     }
 
+    @PostMapping("/block")
+    public ResponseEntity<BaseResponse> blockUser(@RequestBody BlockRequest blockRequest) {
+        try {
+                userProfileService.blockUser(blockRequest.getBlockingUserId(), blockRequest.getBlockedUserId());
+                return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("UserBlocked", HttpStatus.OK, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    @PostMapping("/unblock")
+    public ResponseEntity<BaseResponse> unblockUser(@RequestBody BlockRequest blockRequest) {
+        try {
+            userProfileService.unblockUser(blockRequest.getBlockingUserId(), blockRequest.getBlockedUserId());
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("User UnBlocked", HttpStatus.OK, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
 
     private boolean isValidPhoneNumber(String phoneNumber) {
         if (phoneNumber == null) {

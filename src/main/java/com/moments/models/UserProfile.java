@@ -9,6 +9,7 @@ public class UserProfile {
     private String name;
     private Role role;
     private List<String> eventIds;
+    private List<String> blockedUserIds;
 
     public List<String> getEventIds() {
         return eventIds;
@@ -18,6 +19,13 @@ public class UserProfile {
         this.eventIds = eventIds;
     }
 
+    public List<String> getBlockedUserIds() {
+        return blockedUserIds;
+    }
+
+    public void setBlockedUserIds(List<String> blockedUserIds) {
+        this.blockedUserIds = blockedUserIds;
+    }
 
     // Getters and setters
     public String getUserId() {

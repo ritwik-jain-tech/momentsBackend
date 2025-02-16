@@ -1,6 +1,8 @@
 package com.moments.models;
 
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Moment {
     private String momentId;  // Firestore document ID
@@ -23,8 +25,18 @@ public class Moment {
 
     private MomentStatus status;
 
+    private List<String> reportedBy = new ArrayList<>();
+
     // Getters and Setters
 
+
+    public List<String> getReportedBy() {
+        return reportedBy;
+    }
+
+    public void setReportedBy(List<String> reportedBy) {
+        this.reportedBy = reportedBy;
+    }
 
     public String getMomentId() {
         return momentId;

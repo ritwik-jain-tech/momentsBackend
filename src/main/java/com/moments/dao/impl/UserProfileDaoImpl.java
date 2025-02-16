@@ -125,6 +125,30 @@ public class UserProfileDaoImpl implements UserProfileDao {
         return userProfile;
     }
 
+    @Override
+    public void blockUser(String blockingUserId, String blockedUserId) throws ExecutionException, InterruptedException {
+        UserProfile userProfile = getUserProfile(blockingUserId);
+        if(userProfile!=null && userProfile.getBlockedUserIds()!=null && !userProfile.getBlockedUserIds().contains(blockedUserId)){
+            userProfile.getBlockedUserIds().add(blockedUserId);
+            updateUserProfile(userProfile);
+        }
+        if (userProfile.getBlockedUserIds()==null){
+            userProfile.setBlockedUserIds(new ArrayList<>());
+            userProfile.getBlockedUserIds().add(blockedUserId);
+            updateUserProfile(userProfile);
+        }
+
+    }
+
+    @Override
+    public void unblockUser(String unblockingUserId, String blockedUserId) throws ExecutionException, InterruptedException {
+        UserProfile userProfile = getUserProfile(unblockingUserId);
+        if(userProfile!=null && userProfile.getBlockedUserIds()!=null&& userProfile.getBlockedUserIds().contains(blockedUserId)){
+            userProfile.getBlockedUserIds().remove(blockedUserId);
+            updateUserProfile(userProfile);
+        }
+    }
+
 
     @Override
     public UserProfile findByPhoneNumber(String phoneNumber) {

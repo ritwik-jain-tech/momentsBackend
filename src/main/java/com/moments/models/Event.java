@@ -11,8 +11,17 @@ public class Event {
     private String eventThumbnail;
     private String eventName;
     private List<String> userIds;
+    private int totalMoments;
 
     // Getters and Setters
+
+    public int getTotalMoments() {
+        return totalMoments;
+    }
+
+    public void setTotalMoments(int totalMoments) {
+        this.totalMoments = totalMoments;
+    }
 
     public String getEventId() {
         return eventId;

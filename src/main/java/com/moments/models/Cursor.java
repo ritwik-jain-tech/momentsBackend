@@ -5,12 +5,14 @@ public class Cursor {
     private int offset;
     private int limit;
     private Long lastCreatedTime;
+    private boolean isLastPage;
 
-    public Cursor(int total, int offset, int limit, Long lastCreatedTime) {
+    public Cursor(int total, int offset, int limit, Long lastCreatedTime, boolean isLastPage) {
         this.total = total;
         this.offset = offset;
         this.limit = limit;
         this.lastCreatedTime = lastCreatedTime;
+        this.isLastPage = isLastPage;
     }
 
     public int getTotal() {
@@ -43,5 +45,12 @@ public class Cursor {
 
     public void setLastCreatedTime(Long lastCreatedTime) {
         this.lastCreatedTime = lastCreatedTime;
+    }
+
+    public boolean isLastPage() {
+        return isLastPage;
+    }
+    public void setLastPage(boolean lastPage) {
+        this.isLastPage = lastPage;
     }
 }

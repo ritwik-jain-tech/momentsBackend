@@ -44,4 +44,12 @@ public class UserProfileService {
         eventDao.addUserToEvent(eventId, userId);
         return userProfile;
     }
+
+    public void blockUser(String blockingUserId, String blockedUserId) throws ExecutionException, InterruptedException {
+        userProfileDao.blockUser(blockingUserId, blockedUserId);
+    }
+
+    public void unblockUser(String unblockingUserId, String blockedUserId) throws ExecutionException, InterruptedException {
+      userProfileDao.unblockUser(unblockingUserId, blockedUserId);
+    }
 }

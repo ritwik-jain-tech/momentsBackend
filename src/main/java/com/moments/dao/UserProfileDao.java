@@ -20,9 +20,9 @@ public interface UserProfileDao {
 
     UserProfile addUserToEvent(String userId,String eventId) throws ExecutionException, InterruptedException;
 
+    void blockUser(String blockingUserId, String blockedUserId) throws ExecutionException, InterruptedException;
 
-
-
+    void unblockUser(String unblockingUserId, String blockedUserId) throws ExecutionException, InterruptedException;
 
 }
 

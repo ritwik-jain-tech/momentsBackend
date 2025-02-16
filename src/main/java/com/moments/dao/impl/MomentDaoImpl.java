@@ -4,12 +4,11 @@ import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import com.moments.dao.MomentDao;
 import com.moments.models.Moment;
+import com.moments.models.MomentStatus;
+import com.moments.models.ReportRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -88,7 +87,6 @@ public class MomentDaoImpl implements MomentDao {
         }
 
 
-
         // Fetch all documents matching the query
         ApiFuture<QuerySnapshot> future = query.get();
         List<QueryDocumentSnapshot> documents = future.get().getDocuments();
@@ -120,6 +118,27 @@ public class MomentDaoImpl implements MomentDao {
         // Count all matching documents
         ApiFuture<QuerySnapshot> future = query.get();
         return future.get().size();
+    }
+
+    @Override
+    public boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException {
+        Moment moment = getMomentById(request.getMomentId());
+        if(moment==null){
+            return false;
+        }
+        if(moment.getReportedBy()==null){
+            moment.setReportedBy(new ArrayList<>());
+        }
+        String report = request.getReportingUserId()+ " : "+ request.getEventId()+" : "+ request.getReason();
+        if(!moment.getReportedBy().contains(report)){
+            moment.getReportedBy().add(report);
+            if(moment.getReportedBy().size()>=5){
+                moment.setStatus(MomentStatus.PENDING);
+            }
+            saveMoment(moment);
+            return true;
+        }
+        return false;
     }
 
 

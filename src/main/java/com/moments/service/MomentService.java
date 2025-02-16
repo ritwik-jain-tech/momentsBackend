@@ -41,6 +41,10 @@ public class MomentService {
         return ids;
     }
 
+    public Boolean reportMoment(ReportRequest reportRequest) throws ExecutionException, InterruptedException {
+       return momentDao.reportMoment(reportRequest);
+    }
+
     private String generateMomentId(String creatorId) {
         return creatorId+"_"+epocToString(Instant.now().toEpochMilli());
     }
@@ -67,8 +71,9 @@ public class MomentService {
         List<Moment> moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
 
         int totalCount = momentDao.getTotalCount(creatorId, eventId);
-
-        Cursor cursorOut = new Cursor(totalCount, offset+moments.size(), limit, moments.get(moments.isEmpty()?0:moments.size()-1).getCreationTime());
+        boolean isLastPage= moments.size()<limit;
+        Long  lastMomentCreationTime =moments.isEmpty() ? null : moments.get(moments.size()-1).getCreationTime();
+        Cursor cursorOut = new Cursor(totalCount, offset+moments.size(), limit,lastMomentCreationTime, isLastPage);
         return new MomentsResponse(moments, cursorOut);
     }
 

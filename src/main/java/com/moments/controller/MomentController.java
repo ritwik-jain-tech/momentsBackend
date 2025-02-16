@@ -1,9 +1,6 @@
 package com.moments.controller;
 
-import com.moments.models.BaseResponse;
-import com.moments.models.Moment;
-import com.moments.models.MomentsRequest;
-import com.moments.models.MomentsResponse;
+import com.moments.models.*;
 import com.moments.service.MomentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -90,5 +87,16 @@ public class MomentController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
+    }
+
+    @PostMapping("/report")
+    public ResponseEntity<BaseResponse> reportMoment(@RequestBody ReportRequest reportRequest){
+         try{
+             boolean status = momentService.reportMoment(reportRequest);
+             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Report status: "+ status,HttpStatus.OK,status));
+         } catch (ExecutionException | InterruptedException e) {
+             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                     .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+         }
     }
 }
