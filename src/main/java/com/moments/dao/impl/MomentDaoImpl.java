@@ -76,7 +76,7 @@ public class MomentDaoImpl implements MomentDao {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
 
-
+        query = query.whereEqualTo("status", "APPROVED");
         if(eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
         }
@@ -132,7 +132,7 @@ public class MomentDaoImpl implements MomentDao {
         String report = request.getReportingUserId()+ " : "+ request.getEventId()+" : "+ request.getReason();
         if(!moment.getReportedBy().contains(report)){
             moment.getReportedBy().add(report);
-            if(moment.getReportedBy().size()>=5){
+            if(moment.getReportedBy().size()>0){
                 moment.setStatus(MomentStatus.PENDING);
             }
             saveMoment(moment);

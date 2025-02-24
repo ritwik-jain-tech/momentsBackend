@@ -67,12 +67,12 @@ public class MomentService {
     public MomentsResponse findMoments(String eventId, MomentFilter filter, Cursor cursor) throws ExecutionException, InterruptedException {
         int limit = cursor == null ? 10 : cursor.getLimit();
         int offset = cursor == null ? 0 : cursor.getOffset();
-        String creatorId = filter==null ? null: filter.getCreatedById();
+        String creatorId = filter == null ? null: filter.getCreatedById();
         List<Moment> moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
 
         int totalCount = momentDao.getTotalCount(creatorId, eventId);
         boolean isLastPage= moments.size()<limit;
-        Long  lastMomentCreationTime =moments.isEmpty() ? null : moments.get(moments.size()-1).getCreationTime();
+        Long  lastMomentCreationTime = moments.isEmpty() ? null : moments.get(moments.size()-1).getCreationTime();
         Cursor cursorOut = new Cursor(totalCount, offset+moments.size(), limit,lastMomentCreationTime, isLastPage);
         return new MomentsResponse(moments, cursorOut);
     }
