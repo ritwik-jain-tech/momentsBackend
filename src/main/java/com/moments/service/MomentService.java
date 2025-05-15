@@ -65,7 +65,7 @@ public class MomentService {
     }
 
     public MomentsResponse findMoments(String eventId, MomentFilter filter, Cursor cursor) throws ExecutionException, InterruptedException {
-        int limit = cursor == null ? 10 : cursor.getLimit();
+        int limit = cursor == null ? 20 : cursor.getLimit();
         int offset = cursor == null ? 0 : cursor.getOffset();
         String creatorId = filter == null ? null: filter.getCreatedById();
         List<Moment> moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
