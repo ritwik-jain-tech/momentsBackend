@@ -25,7 +25,7 @@ public class MomentService {
             moment.setCreationTime(moment.getUploadTime());
         }
         moment.setStatus(MomentStatus.APPROVED);
-        moment.setAspectRatio(0.4 + Math.random() * 0.7);
+        moment.setAspectRatio((long)(0.4 + Math.random() * 0.7));
         moment.setCreationTimeText(epocToString(moment.getCreationTime()));
         moment.setUploadTimeText(epocToString(moment.getUploadTime()));
         moment.setMomentId(generateMomentId(moment.getCreatorId()));
@@ -71,7 +71,7 @@ public class MomentService {
         String creatorId = filter == null ? null: filter.getCreatedById();
         List<Moment> moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
         for (Moment moment : moments) {
-            moment.setAspectRatio(0.4 + Math.random() * 0.7);
+            moment.setAspectRatio((long)(0.4 + Math.random() * 0.7));
         }
 
         int totalCount = momentDao.getTotalCount(creatorId, eventId);
