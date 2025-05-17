@@ -86,8 +86,6 @@ public class UserProfileController {
         }
     }
 
-    
-
     @GetMapping("/phone")
     public ResponseEntity<BaseResponse> getUserProfileByPhoneNumber(@RequestParam String phoneNumber) {
         UserProfile userProfile = null;

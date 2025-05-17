@@ -25,9 +25,18 @@ public class Moment {
 
     private MomentStatus status;
 
+    private long aspectRatio;
+
     private List<String> reportedBy = new ArrayList<>();
 
     // Getters and Setters
+    public long getAspectRatio() {
+        return aspectRatio;
+    }
+
+    public void setAspectRatio(long aspectRatio) {
+        this.aspectRatio = aspectRatio;
+    }
 
 
     public List<String> getReportedBy() {
