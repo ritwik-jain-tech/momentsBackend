@@ -86,6 +86,8 @@ public class UserProfileController {
         }
     }
 
+    
+
     @GetMapping("/phone")
     public ResponseEntity<BaseResponse> getUserProfileByPhoneNumber(@RequestParam String phoneNumber) {
         UserProfile userProfile = null;
@@ -146,5 +148,21 @@ public class UserProfileController {
         return phoneNumber.matches(regex);
     }
 
+    @DeleteMapping("/deleteByPhone")
+    public ResponseEntity<BaseResponse> deleteUserByPhoneNumber(@RequestParam String phoneNumber) {
+        try {
+            if (!isValidPhoneNumber(phoneNumber)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Invalid phone number format", HttpStatus.BAD_REQUEST, null));
+            }
+            
+            userProfileService.deleteUserByPhoneNumber(phoneNumber);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("User deleted successfully", HttpStatus.OK, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Error deleting user: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
 
 }

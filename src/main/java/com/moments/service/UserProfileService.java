@@ -52,4 +52,11 @@ public class UserProfileService {
     public void unblockUser(String unblockingUserId, String blockedUserId) throws ExecutionException, InterruptedException {
       userProfileDao.unblockUser(unblockingUserId, blockedUserId);
     }
+
+    public void deleteUserByPhoneNumber(String phoneNumber) throws ExecutionException, InterruptedException {
+        UserProfile userProfile = getUserProfileByPhoneNumber(phoneNumber);
+        if (userProfile != null) {
+            deleteUser(userProfile.getUserId());
+        }
+    }
 }
