@@ -21,6 +21,7 @@ public class GoogleCloudStorageService {
     private Storage storage;
 
     private final String bucketName = System.getProperty("gcp.bucket.name", "momentslive");
+    private final String cdnDomain = "images.moments.live";
 
     public FileUploadResponse uploadFile(MultipartFile file, FileType fileType) throws IOException {
         // Create a unique filename for the uploaded file
@@ -45,10 +46,10 @@ public class GoogleCloudStorageService {
         // Upload the file to the bucket
         Blob blob = storage.create(blobInfo, file.getBytes());
 
-        // Return the public URL of the uploaded file
-        String publicURL = String.format("https://storage.googleapis.com/%s/%s", bucketName, blob.getName());
+        // Return the CDN URL of the uploaded file
+        String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
 
-        return new FileUploadResponse( blobName, contentType,publicURL);
+        return new FileUploadResponse(blobName, contentType, publicURL);
     }
 }
 
