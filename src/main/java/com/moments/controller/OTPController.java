@@ -1,10 +1,8 @@
 package com.moments.controller;
 
-
-
 import com.moments.models.BaseResponse;
 import com.moments.models.OTPRequest;
-import com.moments.models.OTPVerificationResponse;
+import com.moments.models.OTPResponse;
 import com.moments.models.UserProfile;
 import com.moments.service.OTPService;
 import com.moments.service.UserProfileService;
@@ -27,37 +25,34 @@ public class OTPController {
     public ResponseEntity<BaseResponse> sendOtp(@RequestBody OTPRequest otpRequest) {
         try {
             otpService.sendOtp(otpRequest.getPhoneNumber());
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("OTP sent", HttpStatus.OK, null));
+            return ResponseEntity.ok(new BaseResponse("OTP sent successfully", HttpStatus.OK, null));
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to send OTP", HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
     @PostMapping("/verify")
     public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest) {
-        String phoneNumber = otpRequest.getPhoneNumber();
-        int otp =otpRequest.getOtp();
-        String eventId = otpRequest.getEventId();
+        try {
+            OTPResponse otpResponse = otpService.verifyOtp(otpRequest.getPhoneNumber(), otpRequest.getOtp());
+            UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
+            if (otpResponse.isSuccess()) {
+                if( userProfile != null) {
+                    otpResponse.setUserProfile(userProfile);
+                    return ResponseEntity.ok(new BaseResponse("OTP verified successfully, User Profile Exists", HttpStatus.OK, otpResponse));
 
-        boolean isVerified = otpService.verifyOtp(phoneNumber, otp);
-        if(isVerified){
-            UserProfile userProfile = null;
-            try {
-                userProfile = userProfileService.getUserProfileByPhoneNumber(phoneNumber);
-                if(eventId!=null && userProfile!=null){
-                   userProfile = userProfileService.addUserToEvent(userProfile.getUserId(), eventId);
+                } else {
+                    return ResponseEntity.ok(new BaseResponse("OTP verified successfully, userProfile does not Exists", HttpStatus.OK, otpResponse));
                 }
-                return ResponseEntity.status(HttpStatus.OK).body(
-                        new BaseResponse("OTP verified",HttpStatus.OK,new OTPVerificationResponse(true, userProfile))
-                );
-            } catch (Exception e){
-                System.out.println(e.getMessage());
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new BaseResponse("Invalid OTP", HttpStatus.UNAUTHORIZED, null));
             }
-
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to verify OTP", HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
-        return ResponseEntity.status(HttpStatus.OK).body(
-                new BaseResponse("Invalid OTP",HttpStatus.OK,new OTPVerificationResponse(false, null)));
     }
 }
 

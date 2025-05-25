@@ -2,15 +2,15 @@ package com.moments.service;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
-
 import com.moments.dao.OTPDao;
 import com.moments.models.OTPRequest;
+import com.moments.models.OTPResponse;
+import com.moments.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -25,7 +25,11 @@ public class OTPService {
 
     @Autowired
     private OTPDao otpDao;
-    private static final int OTP_VALIDATION_MINUTES =10;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    private static final int OTP_VALIDATION_MINUTES = 10;
     private final RestTemplate restTemplate = new RestTemplate();
 
     public void sendOtp(String phoneNumber) {
@@ -43,13 +47,14 @@ public class OTPService {
         }
     }
 
-    public boolean verifyOtp(String phoneNumber, int otp) {
+    public OTPResponse verifyOtp(String phoneNumber, int otp) {
         OTPRequest otpRequest = otpDao.getOtpByPhoneNumber(phoneNumber);
         if (otpRequest != null && otpRequest.getOtp() == otp) {
-           return true;
+            // Generate JWT token
+            String token = jwtUtil.generateToken(phoneNumber);
+            return new OTPResponse(true, token);
         }
-        return false;
+        return new OTPResponse(false, null);
     }
-
 }
 

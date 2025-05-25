@@ -46,7 +46,7 @@ public class GoogleCloudStorageService {
         // Upload the file to the bucket
         Blob blob = storage.create(blobInfo, file.getBytes());
 
-        // Return the CDN URL of the uploaded file
+        // Return the CDN URL of the uploaded file with HTTPS
         String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
 
         return new FileUploadResponse(blobName, contentType, publicURL);
