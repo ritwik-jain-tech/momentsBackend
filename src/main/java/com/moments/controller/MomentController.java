@@ -99,4 +99,21 @@ public class MomentController {
                      .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
          }
     }
+
+    @PatchMapping("/status")
+    public ResponseEntity<BaseResponse> updateMomentStatus(
+            @RequestBody UpdateMomentStatusRequest request) {
+        try {
+            String result = momentService.updateMomentStatus(request.getMomentId(), request.getStatus());
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Moment status updated successfully", HttpStatus.OK, result));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to update moment status: " + e.getMessage(), 
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        }
+    }
 }

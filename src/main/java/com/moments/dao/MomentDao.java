@@ -5,6 +5,12 @@ import com.moments.models.ReportRequest;
 
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.HashMap;
+import java.util.Map;
+
+import com.google.cloud.firestore.DocumentReference;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.FieldValue;
 
 public interface MomentDao {
     String saveMoment(Moment moment) throws ExecutionException, InterruptedException;
@@ -20,6 +26,8 @@ public interface MomentDao {
     int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException;
 
     boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException;
+
+    String updateMomentStatus(String momentId, String status) throws ExecutionException, InterruptedException;
 }
 
 

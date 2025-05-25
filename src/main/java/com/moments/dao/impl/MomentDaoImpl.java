@@ -10,7 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 @Repository
@@ -139,6 +141,21 @@ public class MomentDaoImpl implements MomentDao {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public String updateMomentStatus(String momentId, String status) throws ExecutionException, InterruptedException {
+        DocumentReference docRef = firestore.collection("moments").document(momentId);
+        DocumentSnapshot document = docRef.get().get();
+
+        if (!document.exists()) {
+            throw new RuntimeException("Moment not found with ID: " + momentId);
+        }
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("status", status);
+        updates.put("updatedAt", FieldValue.serverTimestamp());
+        docRef.update(updates).get();
+        return momentId;
     }
 
 

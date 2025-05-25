@@ -11,12 +11,21 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.HashMap;
+import java.util.Map;
+import com.google.cloud.firestore.DocumentReference;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.FieldValue;
+import com.google.cloud.firestore.Firestore;
 
 @Service
 public class MomentService {
 
     @Autowired
     private MomentDao momentDao; // Inject DAO
+
+    @Autowired
+    private Firestore firestore;
 
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
@@ -87,6 +96,10 @@ public class MomentService {
         return Instant.ofEpochSecond(epoc/1000)
                 .atZone(ZoneId.of("Asia/Kolkata")) // Use IST time zone
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd::HH:mm:ss"));
+    }
+
+    public String updateMomentStatus(String momentId, String status) throws ExecutionException, InterruptedException {
+        return momentDao.updateMomentStatus(momentId, status);
     }
 
 }
