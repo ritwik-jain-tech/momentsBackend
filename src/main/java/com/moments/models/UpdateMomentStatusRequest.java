@@ -2,12 +2,12 @@ package com.moments.models;
 
 public class UpdateMomentStatusRequest {
     private String momentId;
-    private String status;
+    private MomentStatus status;
 
     public UpdateMomentStatusRequest() {
     }
 
-    public UpdateMomentStatusRequest(String momentId, String status) {
+    public UpdateMomentStatusRequest(String momentId, MomentStatus status) {
         this.momentId = momentId;
         this.status = status;
     }
@@ -20,11 +20,11 @@ public class UpdateMomentStatusRequest {
         this.momentId = momentId;
     }
 
-    public String getStatus() {
+    public MomentStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(MomentStatus status) {
         this.status = status;
     }
 } 

@@ -1,6 +1,7 @@
 package com.moments.dao;
 
 import com.moments.models.Moment;
+import com.moments.models.MomentStatus;
 import com.moments.models.ReportRequest;
 
 import java.util.List;
@@ -19,6 +20,8 @@ public interface MomentDao {
 
     List<Moment> getAllMoments() throws ExecutionException, InterruptedException;
 
+    List<Moment> getAllMoments(String eventId) throws ExecutionException, InterruptedException;
+
     void deleteMoment(String id) throws ExecutionException, InterruptedException;
 
     List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit) throws ExecutionException, InterruptedException;
@@ -27,7 +30,7 @@ public interface MomentDao {
 
     boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException;
 
-    String updateMomentStatus(String momentId, String status) throws ExecutionException, InterruptedException;
+    String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException;
 }
 
 

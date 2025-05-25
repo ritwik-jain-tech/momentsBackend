@@ -8,11 +8,9 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.HashMap;
-import java.util.Map;
+
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.FieldValue;
@@ -22,10 +20,7 @@ import com.google.cloud.firestore.Firestore;
 public class MomentService {
 
     @Autowired
-    private MomentDao momentDao; // Inject DAO
-
-    @Autowired
-    private Firestore firestore;
+    private MomentDao momentDao;
 
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
@@ -79,7 +74,9 @@ public class MomentService {
         int limit = cursor == null ? 20 : cursor.getLimit();
         int offset = cursor == null ? 0 : cursor.getOffset();
         String creatorId = filter == null ? null: filter.getCreatedById();
-        List<Moment> moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
+        String source = filter == null ? null: filter.getSource();
+        List<Moment> moments = Objects.equals(source, "web") ?momentDao.getAllMoments(eventId)
+                :momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
         for (Moment moment : moments) {
             double aspectRatio = 0.4 + (Math.random() * 0.7);
             moment.setAspectRatio(Double.doubleToLongBits(aspectRatio));
@@ -98,7 +95,7 @@ public class MomentService {
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd::HH:mm:ss"));
     }
 
-    public String updateMomentStatus(String momentId, String status) throws ExecutionException, InterruptedException {
+    public String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException {
         return momentDao.updateMomentStatus(momentId, status);
     }
 

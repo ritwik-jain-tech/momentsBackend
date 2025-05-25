@@ -67,6 +67,25 @@ public class MomentDaoImpl implements MomentDao {
     }
 
     @Override
+    public List<Moment> getAllMoments(String eventId) throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
+        if(eventId != null && !eventId.isEmpty()) {
+            query = query.whereEqualTo("eventId", eventId);
+        }
+        // Fetch all documents matching the query
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+        List<Moment> moments = new ArrayList<>();
+        for (int i = 0; i < documents.size(); i++) {
+            moments.add(documents.get(i).toObject(Moment.class));
+        }
+
+        return moments;
+    }
+
+    @Override
     public void deleteMoment(String id) throws ExecutionException, InterruptedException {
         DocumentReference documentReference = firestore.collection(COLLECTION_NAME).document(id);
         ApiFuture<WriteResult> future = documentReference.delete();
@@ -103,6 +122,7 @@ public class MomentDaoImpl implements MomentDao {
 
         return moments;
     }
+
 
     @Override
     public int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException {
@@ -144,7 +164,7 @@ public class MomentDaoImpl implements MomentDao {
     }
 
     @Override
-    public String updateMomentStatus(String momentId, String status) throws ExecutionException, InterruptedException {
+    public String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException {
         DocumentReference docRef = firestore.collection("moments").document(momentId);
         DocumentSnapshot document = docRef.get().get();
 

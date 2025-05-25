@@ -44,6 +44,8 @@ public class SecurityConfig {
                     // Swagger UI v3
                     .requestMatchers(new AntPathRequestMatcher("/v3/api-docs/**")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/swagger-ui/**")).permitAll()
+                    // Allow OPTIONS requests for CORS preflight
+                    .requestMatchers(new AntPathRequestMatcher("/**", "OPTIONS")).permitAll()
                     .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
