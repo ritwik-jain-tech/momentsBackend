@@ -78,7 +78,7 @@ public class MomentService {
         List<Moment> moments = Objects.equals(source, "web") ?momentDao.getAllMoments(eventId)
                 :momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
         for (Moment moment : moments) {
-            double aspectRatio = 0.4 + (Math.random() * 0.7);
+            double aspectRatio = Math.round((0.4 + (Math.random() * 0.6)) * 100.0) / 100.0;
             moment.setAspectRatio(Double.doubleToLongBits(aspectRatio));
         }
 
