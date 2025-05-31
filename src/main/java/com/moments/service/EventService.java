@@ -7,6 +7,7 @@ import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -20,7 +21,12 @@ public class EventService {
     private UserProfileDao userProfileDao;// Inject DAO interface
 
     // Create or Update an Event
-    public String saveEvent(Event event) throws ExecutionException, InterruptedException {
+    public String saveEvent(Event event) throws ExecutionException, InterruptedException, InvocationTargetException {
+        String eventId = String.format("%06d", (int)(Math.random() * 1000000));
+        event.setEventId(eventId);
+        List<String> userIDs = new ArrayList<>();
+        userIDs.add(event.getCreatorId());
+        event.setUserIds(userIDs);
         return eventDao.saveEvent(event);
     }
 

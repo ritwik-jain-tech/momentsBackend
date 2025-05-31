@@ -6,11 +6,14 @@ import com.moments.models.BaseResponse;
 import com.moments.models.Event;
 import com.moments.models.UserProfile;
 import com.moments.service.EventService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -18,6 +21,7 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api/event")
 public class EventController {
 
+    private static final Logger log = LoggerFactory.getLogger(EventController.class);
     @Autowired
     private EventService eventService; // Use the service layer
 
@@ -27,7 +31,10 @@ public class EventController {
         try {
             String time = eventService.saveEvent(event);
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success updated time: "+ time, HttpStatus.OK, event));
-        } catch (Exception e) {
+
+        }
+        catch (Exception e) {
+            log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
@@ -43,6 +50,7 @@ public class EventController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new BaseResponse("Event not found", HttpStatus.NOT_FOUND, event));
 
        } catch (ExecutionException | InterruptedException e) {
+           log.error(e.getMessage());
           return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
        }
     }
@@ -54,6 +62,7 @@ public class EventController {
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success getting Users for Event", HttpStatus.OK, userProfiles));
 
         } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
@@ -65,6 +74,7 @@ public class EventController {
             List<Event> allEvents = eventService.getAllEvents();
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success getting events", HttpStatus.OK, allEvents));
         } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage());
            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
@@ -78,6 +88,7 @@ public class EventController {
 
         }
         catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
@@ -92,6 +103,7 @@ public class EventController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new BaseResponse("Event not found", HttpStatus.NOT_FOUND, null));
 
         } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
