@@ -155,8 +155,8 @@ class CreatorDetails {
 class Media {
     private String url;
     private MediaType type;
-    private int width;
-    private int height;
+    private Integer width;
+    private Integer height;
 
     public int getWidth() {
         return width;
