@@ -155,10 +155,10 @@ class CreatorDetails {
 class Media {
     private String url;
     private MediaType type;
-    private Integer width = 0;
-    private Integer height = 0;
+    private Integer width ;
+    private Integer height ;
 
-    public int getWidth() {
+    public Integer getWidth() {
         return width;
     }
 
@@ -166,7 +166,7 @@ class Media {
         this.width = width;
     }
 
-    public int getHeight() {
+    public Integer getHeight() {
         return height;
     }
 
