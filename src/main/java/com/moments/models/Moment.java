@@ -155,6 +155,24 @@ class CreatorDetails {
 class Media {
     private String url;
     private MediaType type;
+    private int width;
+    private int height;
+
+    public int getWidth() {
+        return width;
+    }
+
+    public void setWidth(int width) {
+        this.width = width;
+    }
+
+    public int getHeight() {
+        return height;
+    }
+
+    public void setHeight(int height) {
+        this.height = height;
+    }
 
     public String getUrl() {
         return url;
@@ -171,6 +189,7 @@ class Media {
     public void setType(MediaType type) {
         this.type = type;
     }
+
 }
 
 enum MediaType {
