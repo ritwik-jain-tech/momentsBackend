@@ -18,5 +18,7 @@ public interface EventDao {
     Event addUserToEvent(String eventId, String userId) throws ExecutionException, InterruptedException;
 
     List<String> getUserIdsInEvent(String eventId) throws ExecutionException, InterruptedException;
+
+    List<Event> getEventsByIds(List<String> eventIds) throws ExecutionException, InterruptedException;
 }
 

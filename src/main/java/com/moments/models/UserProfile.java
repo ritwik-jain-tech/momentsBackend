@@ -10,6 +10,15 @@ public class UserProfile {
     private Role role;
     private List<String> eventIds;
     private List<String> blockedUserIds;
+    private List<Event> eventDetails;
+
+    public List<Event> getEventDetails() {
+        return eventDetails;
+    }
+
+    public void setEventDetails(List<Event> eventDetails) {
+        this.eventDetails = eventDetails;
+    }
 
     public List<String> getEventIds() {
         return eventIds;

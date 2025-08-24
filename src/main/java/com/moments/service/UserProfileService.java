@@ -24,7 +24,9 @@ public class UserProfileService {
     }
 
     public UserProfile getUser(String userId) throws ExecutionException, InterruptedException {
-        return userProfileDao.getUserProfile(userId);
+       UserProfile userProfile = userProfileDao.getUserProfile(userId);
+       userProfile.setEventDetails(eventDao.getEventsByIds(userProfile.getEventIds()));
+       return userProfile;
     }
 
     public void updateUser(UserProfile userProfile) throws ExecutionException, InterruptedException {

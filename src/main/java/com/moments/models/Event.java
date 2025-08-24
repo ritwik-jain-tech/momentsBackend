@@ -12,6 +12,8 @@ public class Event {
     private String eventName;
     private List<String> userIds;
     private int totalMoments;
+    private Long startTime;
+    private Long endTime;
 
     // Getters and Setters
 
@@ -69,6 +71,22 @@ public class Event {
 
     public void setMemberCount(int memberCount){
 
+    }
+
+    public Long getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(Long startTime) {
+        this.startTime = startTime;
+    }
+
+    public Long getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(Long endTime) {
+        this.endTime = endTime;
     }
 
 }

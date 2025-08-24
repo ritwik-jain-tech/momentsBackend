@@ -9,7 +9,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 @Repository
@@ -90,6 +92,98 @@ public class EventDaoImpl implements EventDao {
     @Override
     public List<String> getUserIdsInEvent(String eventId) throws ExecutionException, InterruptedException {
         return getEventById(eventId).getUserIds();
+    }
+
+    
+    @Override
+    public List<Event> getEventsByIds(List<String> eventIds) throws ExecutionException, InterruptedException {
+        List<Event> events = new ArrayList<>();
+        if (eventIds == null || eventIds.isEmpty()) {
+            return events;
+        }
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+
+        // Firestore "in" queries are limited to 10 items per query
+        int batchSize = 10;
+        Map<String, Event> eventMap = new HashMap<>();
+        for (int i = 0; i < eventIds.size(); i += batchSize) {
+            int endIndex = Math.min(i + batchSize, eventIds.size());
+            List<String> batch = eventIds.subList(i, endIndex);
+
+            Query query = collection.whereIn("eventId", batch);
+            ApiFuture<QuerySnapshot> future = query.get();
+            List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+            for (QueryDocumentSnapshot document : documents) {
+                Event event = document.toObject(Event.class);
+                if (event != null) {
+                    eventMap.put(event.getEventId(), event);
+                }
+            }
+        }
+        // Maintain the same order as eventIds
+        for (String id : eventIds) {
+            Event event = eventMap.get(id);
+            if (event != null) {
+                events.add(event);
+            }
+        }
+        return events;
+    }
+
+    @Override
+    public List<Event> getEventsByTimeRange(Long startTime, Long endTime) throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.orderBy("startTime", Query.Direction.ASCENDING);
+        
+        if (startTime != null) {
+            query = query.whereGreaterThanOrEqualTo("startTime", startTime);
+        }
+        if (endTime != null) {
+            query = query.whereLessThanOrEqualTo("startTime", endTime);
+        }
+        
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+        List<Event> events = new ArrayList<>();
+        for (QueryDocumentSnapshot document : documents) {
+            events.add(document.toObject(Event.class));
+        }
+        return events;
+    }
+
+    @Override
+    public List<Event> getOngoingEvents(Long currentTime) throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.whereLessThanOrEqualTo("startTime", currentTime)
+                               .whereGreaterThanOrEqualTo("endTime", currentTime)
+                               .orderBy("startTime", Query.Direction.DESCENDING);
+        
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+        List<Event> events = new ArrayList<>();
+        for (QueryDocumentSnapshot document : documents) {
+            events.add(document.toObject(Event.class));
+        }
+        return events;
+    }
+
+    @Override
+    public List<Event> getPastEvents(Long currentTime) throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.whereLessThan("endTime", currentTime)
+                               .orderBy("endTime", Query.Direction.DESCENDING);
+        
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+        List<Event> events = new ArrayList<>();
+        for (QueryDocumentSnapshot document : documents) {
+            events.add(document.toObject(Event.class));
+        }
+        return events;
     }
 }
 

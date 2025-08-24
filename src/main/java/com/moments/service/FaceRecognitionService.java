@@ -9,6 +9,7 @@ import org.bytedeco.opencv.opencv_objdetect.*;
 import org.bytedeco.opencv.opencv_face.*;
 import org.bytedeco.opencv.opencv_dnn.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -27,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.PostConstruct;
 
 import static org.bytedeco.opencv.global.opencv_imgproc.*;
 import static org.bytedeco.opencv.global.opencv_imgcodecs.*;
@@ -46,16 +48,29 @@ public class FaceRecognitionService {
     private static final double GROUP_MIN_FACE_SIZE_RATIO = 0.08;
     private static final double GROUP_MAX_FACE_SIZE_RATIO = 0.6;
     private static final int GROUP_MIN_NEIGHBORS = 4;
-    private final CascadeClassifier faceDetector;
-    private final Net faceNet;
-    private final Size inputSize;
-    private final Scalar mean;
-    private final double scale;
+    private CascadeClassifier faceDetector;
+    private Net faceNet;
+    private Size inputSize;
+    private Scalar mean;
+    private double scale;
+    
+    @Value("${face.recognition.enabled:false}")
+    private boolean faceRecognitionEnabled;
 
-    @Autowired
+    @Autowired(required = false)
     private CloseableHttpClient httpClient;
 
     public FaceRecognitionService() {
+        // Constructor will be called, but initialization will be conditional
+    }
+    
+    @PostConstruct
+    public void initialize() {
+        if (!faceRecognitionEnabled) {
+            logger.info("Face recognition is disabled. Skipping initialization.");
+            return;
+        }
+        
         try {
             logger.info("Initializing FaceRecognitionService...");
             // Load OpenCV native library
@@ -150,6 +165,11 @@ public class FaceRecognitionService {
     }
 
     public boolean isPersonInImage(String personImageUrl, String groupImageUrl) throws IOException {
+        if (!faceRecognitionEnabled) {
+            logger.warn("Face recognition is disabled. Returning false for face recognition request.");
+            return false;
+        }
+        
         logger.info("Starting face recognition process for person image: {} and group image: {}", 
             personImageUrl, groupImageUrl);
         
@@ -210,6 +230,10 @@ public class FaceRecognitionService {
     }
 
     private byte[] downloadImage(String imageUrl) throws IOException {
+        if (httpClient == null) {
+            throw new IOException("HttpClient is not available. Face recognition may be disabled.");
+        }
+        
         logger.debug("Downloading image from URL: {}", imageUrl);
         HttpGet request = new HttpGet(imageUrl);
         try {

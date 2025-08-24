@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.InvocationTargetException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -22,11 +23,28 @@ public class EventService {
 
     // Create or Update an Event
     public String saveEvent(Event event) throws ExecutionException, InterruptedException, InvocationTargetException {
-        String eventId = String.format("%06d", (int)(Math.random() * 1000000));
-        event.setEventId(eventId);
-        List<String> userIDs = new ArrayList<>();
-        userIDs.add(event.getCreatorId());
-        event.setUserIds(userIDs);
+        // Generate event ID if not provided
+        if (event.getEventId() == null || event.getEventId().isEmpty()) {
+            String eventId = String.format("%06d", (int)(Math.random() * 1000000));
+            event.setEventId(eventId);
+        }
+        
+        // Set default times if not provided
+        if (event.getStartTime() == null) {
+            event.setStartTime(Instant.now().toEpochMilli());
+        }
+        if (event.getEndTime() == null) {
+            // Default to 48 hours from start time
+            event.setEndTime(event.getStartTime() + (48 * 60 * 60 * 1000));
+        }
+        
+        // Initialize user list if not provided
+        if (event.getUserIds() == null) {
+            List<String> userIDs = new ArrayList<>();
+            userIDs.add(event.getCreatorId());
+            event.setUserIds(userIDs);
+        }
+        
         return eventDao.saveEvent(event);
     }
 
