@@ -28,6 +28,10 @@ public class Moment {
     private long aspectRatio;
 
     private List<String> reportedBy = new ArrayList<>();
+    
+    private List<String> likedBy = new ArrayList<>();
+
+    private boolean isLiked;
 
     // Getters and Setters
     public long getAspectRatio() {
@@ -45,6 +49,14 @@ public class Moment {
 
     public void setReportedBy(List<String> reportedBy) {
         this.reportedBy = reportedBy;
+    }
+
+    public List<String> getLikedBy() {
+        return likedBy;
+    }
+
+    public void setLikedBy(List<String> likedBy) {
+        this.likedBy = likedBy;
     }
 
     public String getMomentId() {
@@ -125,6 +137,14 @@ public class Moment {
 
     public void setStatus(MomentStatus status) {
         this.status = status;
+    }
+
+    public void setIsLiked(boolean b) {
+        this.isLiked = b;
+    }
+
+    public boolean isLiked() {
+        return isLiked;
     }
 }
 

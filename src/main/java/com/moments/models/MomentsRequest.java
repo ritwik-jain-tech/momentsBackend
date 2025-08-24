@@ -5,6 +5,7 @@ public class MomentsRequest {
     MomentFilter filter;
     Cursor cursor;
     String eventId;
+    String userId;
 
     public MomentFilter getFilter() {
         return filter;
@@ -28,5 +29,13 @@ public class MomentsRequest {
 
     public void setEventId(String eventId) {
         this.eventId = eventId;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 }

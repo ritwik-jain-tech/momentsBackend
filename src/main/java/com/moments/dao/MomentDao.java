@@ -31,6 +31,8 @@ public interface MomentDao {
     boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException;
 
     String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException;
+    
+    List<Moment> getMomentsByIds(List<String> momentIds) throws ExecutionException, InterruptedException;
 }
 
 

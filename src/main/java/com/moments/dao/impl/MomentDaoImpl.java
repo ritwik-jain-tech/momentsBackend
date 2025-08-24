@@ -165,7 +165,7 @@ public class MomentDaoImpl implements MomentDao {
 
     @Override
     public String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException {
-        DocumentReference docRef = firestore.collection("moments").document(momentId);
+        DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(momentId);
         DocumentSnapshot document = docRef.get().get();
 
         if (!document.exists()) {
@@ -176,6 +176,48 @@ public class MomentDaoImpl implements MomentDao {
         updates.put("updatedAt", FieldValue.serverTimestamp());
         docRef.update(updates).get();
         return momentId;
+    }
+
+    @Override
+    public List<Moment> getMomentsByIds(List<String> momentIds) throws ExecutionException, InterruptedException {
+        if (momentIds == null || momentIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Create a map to store moments by their momentId for quick lookup
+        Map<String, Moment> momentMap = new HashMap<>();
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        
+        // Firestore doesn't support "IN" queries with more than 10 values
+        // So we need to batch the requests
+        int batchSize = 10;
+        for (int i = 0; i < momentIds.size(); i += batchSize) {
+            int endIndex = Math.min(i + batchSize, momentIds.size());
+            List<String> batch = momentIds.subList(i, endIndex);
+            
+            // Use "in" query for each batch
+            Query query = collection.whereIn("momentId", batch);
+            ApiFuture<QuerySnapshot> future = query.get();
+            List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+            
+            for (QueryDocumentSnapshot document : documents) {
+                Moment moment = document.toObject(Moment.class);
+                if (moment != null) {
+                    momentMap.put(moment.getMomentId(), moment);
+                }
+            }
+        }
+        
+        // Return moments in the same order as the requested momentIds
+        List<Moment> orderedMoments = new ArrayList<>();
+        for (String momentId : momentIds) {
+            Moment moment = momentMap.get(momentId);
+            if (moment != null) {
+                orderedMoments.add(moment);
+            }
+        }
+        
+        return orderedMoments;
     }
 
 

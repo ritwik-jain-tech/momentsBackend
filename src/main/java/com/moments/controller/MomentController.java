@@ -69,7 +69,7 @@ public class MomentController {
     @PostMapping("/feed")
     public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request){
         try {
-            MomentsResponse response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor());
+            MomentsResponse response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(), request.getUserId());
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
         } catch (ExecutionException  | InterruptedException e){
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -114,6 +114,28 @@ public class MomentController {
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        }
+    }
+
+    @PostMapping("/like")
+    public ResponseEntity<BaseResponse> likeMoment(@RequestBody LikeRequest likeRequest){
+        try{
+            boolean status = momentService.likeMoment(likeRequest);
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Like status: "+ status,HttpStatus.OK,status));
+        } catch (Exception  e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to like moment: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+        }
+    }
+
+    @PostMapping("/liked-feed")
+    public ResponseEntity<BaseResponse> getLikedMomentsFeed(@RequestBody LikedMomentsRequest request){
+        try {
+            MomentsResponse response = momentService.getLikedMomentsFeed(request.getUserId(), request.getEventId(), request.getCursor());
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
+        } catch (ExecutionException | InterruptedException e){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to get liked moments: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 }
