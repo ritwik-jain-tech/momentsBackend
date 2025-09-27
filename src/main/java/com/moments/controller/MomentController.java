@@ -78,7 +78,7 @@ public class MomentController {
                 notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
             }
             MomentsResponse response = new MomentsResponse(new ArrayList<>(), null);
-            if(request.getFilter().getLikedById()!=null){
+            if(request.getFilter()!=null && request.getFilter().getLikedById()!=null){
                 //Liked Feed
                  response = momentService.getLikedMomentsFeed(request.getFilter().getLikedById(), request.getEventId(), request.getCursor());
             }else {
