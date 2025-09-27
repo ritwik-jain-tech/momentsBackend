@@ -45,24 +45,6 @@ public class OTPController {
             UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
             if (otpResponse.isSuccess()) {
                 if( userProfile != null) {
-                    // Print all available headers with their keys and values
-                    System.out.println("---- OTP Verification Request ----");
-                    System.out.println("FCMToken: " + fcmToken);
-                    System.out.println("UserProfile: " + userProfile);
-
-                    // Print all headers from the headers map
-                    // Log all headers from the request
-                   System.out.println("Headers:"+ headers.toString());
-
-                    // Save or update FCM token if provided
-                    if (fcmToken != null && !fcmToken.trim().isEmpty()) {
-                        try {
-                            notificationService.saveOrUpdateFCMToken(userProfile.getUserId(), fcmToken);
-                        } catch (Exception e) {
-                            // Log the error but don't fail the OTP verification
-                            System.err.println("Failed to save FCM token for user " + userProfile.getUserId() + ": " + e.getMessage());
-                        }
-                    }
                     otpResponse.setUserProfile(userProfile);
                     return ResponseEntity.ok(new BaseResponse("OTP verified successfully, User Profile Exists", HttpStatus.OK, otpResponse));
 

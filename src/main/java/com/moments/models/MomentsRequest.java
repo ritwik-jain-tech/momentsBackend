@@ -7,6 +7,7 @@ public class MomentsRequest {
     String eventId;
     String userId;
 
+
     public MomentFilter getFilter() {
         return filter;
     }

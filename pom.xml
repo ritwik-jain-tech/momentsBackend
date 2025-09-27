@@ -42,7 +42,7 @@
         <dependency>
             <groupId>com.google.firebase</groupId>
             <artifactId>firebase-admin</artifactId>
-            <version>8.1.0</version> <!-- Update to the latest version -->
+            <version>9.2.0</version> <!-- Updated to latest version -->
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>

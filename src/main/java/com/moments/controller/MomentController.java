@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -71,16 +72,19 @@ public class MomentController {
     }
 
     @PostMapping("/feed")
-    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken
-    , @RequestHeader java.util.Map<String, String> headers){
+    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken){
         try {
-            System.out.println("Feed API Call ::::::::::::::::::");
-            System.out.println("FCMToken: " + fcmToken);
-            System.out.println("Headers: " + headers.toString());
             if(fcmToken != null && request.getCursor()==null){
                 notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
             }
-            MomentsResponse response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(), request.getUserId());
+            MomentsResponse response = new MomentsResponse(new ArrayList<>(), null);
+            if(request.getFilter().getLikedById()!=null){
+                //Liked Feed
+                 response = momentService.getLikedMomentsFeed(request.getFilter().getLikedById(), request.getEventId(), request.getCursor());
+            }else {
+                //Default feed
+                  response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(), request.getUserId());
+            }
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
         } catch (ExecutionException  | InterruptedException e){
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

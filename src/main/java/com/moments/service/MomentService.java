@@ -38,8 +38,6 @@ public class MomentService {
             moment.setCreationTime(moment.getUploadTime());
         }
         moment.setStatus(MomentStatus.APPROVED);
-        double aspectRatio = 0.4 + (Math.random() * 0.7);
-        moment.setAspectRatio(Double.doubleToLongBits(aspectRatio));
         moment.setCreationTimeText(epocToString(moment.getCreationTime()));
         moment.setUploadTimeText(epocToString(moment.getUploadTime()));
         moment.setMomentId(generateMomentId(moment.getCreatorId()));
