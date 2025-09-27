@@ -6,6 +6,7 @@ import com.moments.models.OTPResponse;
 import com.moments.models.UserProfile;
 import com.moments.service.OTPService;
 import com.moments.service.UserProfileService;
+import com.moments.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,9 @@ public class OTPController {
     @Autowired
     private UserProfileService userProfileService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     @PostMapping("/send")
     public ResponseEntity<BaseResponse> sendOtp(@RequestBody OTPRequest otpRequest) {
         try {
@@ -33,12 +37,22 @@ public class OTPController {
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest) {
+    public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest, 
+                                                 @RequestHeader(value = "fcm-token", required = false) String fcmToken) {
         try {
             OTPResponse otpResponse = otpService.verifyOtp(otpRequest.getPhoneNumber(), otpRequest.getOtp());
             UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
             if (otpResponse.isSuccess()) {
                 if( userProfile != null) {
+                    // Save or update FCM token if provided
+                    if (fcmToken != null && !fcmToken.trim().isEmpty()) {
+                        try {
+                            notificationService.saveOrUpdateFCMToken(userProfile.getUserId(), fcmToken);
+                        } catch (Exception e) {
+                            // Log the error but don't fail the OTP verification
+                            System.err.println("Failed to save FCM token for user " + userProfile.getUserId() + ": " + e.getMessage());
+                        }
+                    }
                     otpResponse.setUserProfile(userProfile);
                     return ResponseEntity.ok(new BaseResponse("OTP verified successfully, User Profile Exists", HttpStatus.OK, otpResponse));
 
@@ -55,4 +69,3 @@ public class OTPController {
         }
     }
 }
-

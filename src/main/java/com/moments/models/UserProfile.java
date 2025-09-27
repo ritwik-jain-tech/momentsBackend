@@ -11,6 +11,7 @@ public class UserProfile {
     private List<String> eventIds;
     private List<String> blockedUserIds;
     private List<Event> eventDetails;
+    private String fcmToken;
 
     public List<Event> getEventDetails() {
         return eventDetails;
@@ -69,6 +70,14 @@ public class UserProfile {
         this.role = role;
     }
 
+    public String getFcmToken() {
+        return fcmToken;
+    }
+
+    public void setFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
+    }
+
     @Override
     public String toString() {
         return "UserProfile{" +
@@ -77,7 +86,7 @@ public class UserProfile {
                 ", name='" + name + '\'' +
                 ", role=" + role +
                 ", eventIds=" + eventIds +
+                ", fcmToken='" + fcmToken + '\'' +
                 '}';
     }
 }
-
