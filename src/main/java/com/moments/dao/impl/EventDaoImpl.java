@@ -131,7 +131,7 @@ public class EventDaoImpl implements EventDao {
         return events;
     }
 
-    @Override
+
     public List<Event> getEventsByTimeRange(Long startTime, Long endTime) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("startTime", Query.Direction.ASCENDING);
@@ -153,7 +153,7 @@ public class EventDaoImpl implements EventDao {
         return events;
     }
 
-    @Override
+
     public List<Event> getOngoingEvents(Long currentTime) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.whereLessThanOrEqualTo("startTime", currentTime)
@@ -170,7 +170,7 @@ public class EventDaoImpl implements EventDao {
         return events;
     }
 
-    @Override
+
     public List<Event> getPastEvents(Long currentTime) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.whereLessThan("endTime", currentTime)

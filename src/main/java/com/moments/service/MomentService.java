@@ -17,6 +17,7 @@ import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.FieldValue;
 import com.google.cloud.firestore.Firestore;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class MomentService {
@@ -26,6 +27,9 @@ public class MomentService {
     
     @Autowired
     private LikeDao likeDao;
+
+    @Autowired
+    private FaceRecognitionService faceRecognitionService;
 
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
@@ -41,7 +45,6 @@ public class MomentService {
         moment.setMomentId(generateMomentId(moment.getCreatorId()));
         return momentDao.saveMoment(moment);
     }
-
 
     public List<String> saveMoments(List<Moment> moments) throws ExecutionException, InterruptedException {
         List<String> ids = new ArrayList<>();
@@ -160,7 +163,32 @@ public class MomentService {
         return new MomentsResponse(likedMoments, cursorOut);
     }
 
+    // Process moment with face recognition
+    public String saveMomentWithFaceRecognition(Moment moment, MultipartFile imageFile) throws ExecutionException, InterruptedException {
+        // First save the moment
+        String momentId = saveMoment(moment);
+        
+        // Process face recognition if image is provided
+        if (imageFile != null && !imageFile.isEmpty()) {
+            try {
+                FaceEmbeddingResponse faceResponse = faceRecognitionService.processMomentImage(imageFile, momentId);
+                if (faceResponse.isSuccess() && !faceResponse.getTaggedUserIds().isEmpty()) {
+                    // Update moment with tagged users
+                    moment.setTaggedUserIds(faceResponse.getTaggedUserIds());
+                    momentDao.saveMoment(moment);
+                    
+                    // Log the results
+                    org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MomentService.class);
+                    logger.info("Face recognition completed for moment {}: {} faces detected, {} users tagged", 
+                        momentId, faceResponse.getFacesDetected(), faceResponse.getTaggedUserIds().size());
+                }
+            } catch (Exception e) {
+                org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MomentService.class);
+                logger.error("Face recognition failed for moment {}: {}", momentId, e.getMessage(), e);
+                // Continue without face recognition - don't fail the moment creation
+            }
+        }
+        
+        return momentId;
+    }
 }
-
-
-

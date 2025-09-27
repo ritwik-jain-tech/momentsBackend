@@ -138,4 +138,24 @@ public class MomentController {
                     .body(new BaseResponse("Failed to get liked moments: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
+
+    // Create a Moment with Face Recognition
+    @PostMapping("/with-face-recognition")
+    public ResponseEntity<BaseResponse> createMomentWithFaceRecognition(
+            @RequestParam("imageFile") org.springframework.web.multipart.MultipartFile imageFile,
+            @RequestParam("moment") String momentJson) {
+        try {
+            // Parse moment from JSON
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Moment moment = objectMapper.readValue(momentJson, Moment.class);
+            
+            String result = momentService.saveMomentWithFaceRecognition(moment, imageFile);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Created moment with face recognition, Id: " + result, HttpStatus.OK, moment));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to create moment with face recognition, error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
 }

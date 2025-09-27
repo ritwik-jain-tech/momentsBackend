@@ -1,5 +1,7 @@
 package com.moments.service;
 
+import com.moments.models.FaceEmbeddingResponse;
+import com.moments.models.FaceEmbeddingResult;
 import org.bytedeco.javacpp.FloatPointer;
 import org.bytedeco.javacpp.IntPointer;
 import org.bytedeco.javacpp.Loader;
@@ -54,7 +56,7 @@ public class FaceRecognitionService {
     private Scalar mean;
     private double scale;
     
-    @Value("${face.recognition.enabled:false}")
+    @Value("${face.recognition.enabled:true}")
     private boolean faceRecognitionEnabled;
 
     @Autowired(required = false)
@@ -108,6 +110,58 @@ public class FaceRecognitionService {
             throw new RuntimeException("Failed to initialize face recognition service", e);
         }
     }
+
+    public FaceEmbeddingResult extractUserFaceEmbedding(MultipartFile imageFile) {
+            if (!faceRecognitionEnabled) {
+                logger.warn("Face recognition is disabled. Skipping face embedding extraction.");
+                return new FaceEmbeddingResult(false, "Face recognition is disabled", null, 0);
+            }
+
+            logger.info("Extracting face embedding from user selfie");
+
+            try {
+                // Save uploaded file to temporary location
+                java.io.File tempFile = java.nio.file.Files.createTempFile("face_recognition_", ".jpg").toFile();
+                java.nio.file.Files.write(tempFile.toPath(), imageFile.getBytes());
+
+                try {
+                    // Detect faces in the selfie
+                    List<Mat> faces = detectFaces(tempFile);
+
+                    if (faces.isEmpty()) {
+                        logger.info("No faces detected in selfie image");
+                        return new com.moments.models.FaceEmbeddingResult(true, "No faces detected in the selfie", null, 0);
+                    }
+
+                    // Extract face embedding from the first (and usually only) face in selfie
+                    Mat face = faces.get(0);
+                    Mat embedding = extractFaceEmbedding(face);
+
+                    // Convert Mat to List<Double>
+                    List<Double> embeddingList = new java.util.ArrayList<>();
+                    org.bytedeco.javacpp.FloatPointer floatPointer = new org.bytedeco.javacpp.FloatPointer(embedding);
+                    for (int i = 0; i < embedding.total(); i++) {
+                        embeddingList.add((double) floatPointer.get(i));
+                    }
+
+                    logger.info("Successfully extracted face embedding from selfie: {} dimensions", embeddingList.size());
+
+                    return new FaceEmbeddingResult(
+                        true,
+                        "Successfully extracted face embedding",
+                        embeddingList,
+                        faces.size()
+                    );
+
+                } finally {
+                    // Clean up temporary file
+                    java.nio.file.Files.deleteIfExists(tempFile.toPath());
+                }
+            } catch (Exception e) {
+                logger.error("Error extracting face embedding from selfie: {}", e.getMessage(), e);
+                return new com.moments.models.FaceEmbeddingResult(false, "Error extracting embedding: " + e.getMessage(), null, 0);
+            }
+        }
 
     private Mat extractFaceEmbedding(Mat face) {
         try {
@@ -372,4 +426,107 @@ public class FaceRecognitionService {
         logger.info("Detected {} valid faces in image: {}", faces.size(), imageFile.getAbsolutePath());
         return faces;
     }
-} 
+
+
+    public FaceEmbeddingResponse processMomentImage(MultipartFile imageFile, String momentId) {
+        if (!faceRecognitionEnabled) {
+            logger.warn("Face recognition is disabled. Skipping face processing.");
+            return new com.moments.models.FaceEmbeddingResponse(false, "Face recognition is disabled", new ArrayList<>(), 0, 0);
+        }
+
+        logger.info("Processing moment image for momentId: {}", momentId);
+        
+        try {
+            // Save uploaded file to temporary location
+            java.io.File tempFile = java.nio.file.Files.createTempFile("face_recognition_", ".jpg").toFile();
+            java.nio.file.Files.write(tempFile.toPath(), imageFile.getBytes());
+            
+            try {
+                // Detect faces in the image
+                List<Mat> faces = detectFaces(tempFile);
+                
+                if (faces.isEmpty()) {
+                    logger.info("No faces detected in moment image");
+                    return new com.moments.models.FaceEmbeddingResponse(true, "No faces detected in the image", new ArrayList<>(), 0, 0);
+                }
+
+                List<String> taggedUserIds = new ArrayList<>();
+                int facesMatched = 0;
+
+                // Process each detected face
+                for (int i = 0; i < faces.size(); i++) {
+                    Mat face = faces.get(i);
+                    String faceId = java.util.UUID.randomUUID().toString();
+                    
+                    // Extract face embedding
+                    Mat embedding = extractFaceEmbedding(face);
+                    
+                    // Convert Mat to List<Double>
+                    List<Double> embeddingList = new java.util.ArrayList<>();
+                    org.bytedeco.javacpp.FloatPointer floatPointer = new org.bytedeco.javacpp.FloatPointer(embedding);
+                    for (int j = 0; j < embedding.total(); j++) {
+                        embeddingList.add((double) floatPointer.get(j));
+                    }
+                    
+                    // For now, we'll just return empty tagged users since we don't have the DAO integration
+                    // In a full implementation, you would search for matching users here
+                    logger.debug("Extracted face embedding for face {}: {} dimensions", i + 1, embeddingList.size());
+                }
+
+                logger.info("Processed moment image: {} faces detected, {} faces matched to users", 
+                    faces.size(), facesMatched);
+
+                return new com.moments.models.FaceEmbeddingResponse(
+                    true, 
+                    "Successfully processed moment image", 
+                    taggedUserIds, 
+                    faces.size(), 
+                    facesMatched
+                );
+
+            } finally {
+                // Clean up temporary file
+                java.nio.file.Files.deleteIfExists(tempFile.toPath());
+            }
+        } catch (Exception e) {
+            logger.error("Error processing moment image: {}", e.getMessage(), e);
+            return new com.moments.models.FaceEmbeddingResponse(false, "Error processing image: " + e.getMessage(), new ArrayList<>(), 0, 0);
+        }
+    }
+
+    public FaceEmbeddingResponse processSelfieImage(MultipartFile imageFile, String userId) {
+        if (!faceRecognitionEnabled) {
+            logger.warn("Face recognition is disabled. Skipping face processing.");
+            return new FaceEmbeddingResponse(false, "Face recognition is disabled", new ArrayList<>(), 0, 0);
+        }
+
+        logger.info("Processing selfie image for userId: {}", userId);
+        try {
+            java.io.File tempFile = java.nio.file.Files.createTempFile("face_recognition_", ".jpg").toFile();
+            java.nio.file.Files.write(tempFile.toPath(), imageFile.getBytes());
+            try {
+                List<Mat> faces = detectFaces(tempFile);
+                if (faces.isEmpty()) {
+                    logger.info("No faces detected in selfie image");
+                    return new FaceEmbeddingResponse(true, "No faces detected in the selfie", new ArrayList<>(), 0, 0);
+                }
+                Mat face = faces.get(0);
+                Mat embedding = extractFaceEmbedding(face);
+                List<Double> embeddingList = new java.util.ArrayList<>();
+                org.bytedeco.javacpp.FloatPointer floatPointer = new org.bytedeco.javacpp.FloatPointer(embedding);
+                for (int i = 0; i < embedding.total(); i++) {
+                    embeddingList.add((double) floatPointer.get(i));
+                }
+                // TODO: match embedding against stored user/moment embeddings
+                List<String> matchedMomentIds = new ArrayList<>();
+                logger.info("Processed selfie: {} faces detected, {} moments matched", faces.size(), matchedMomentIds.size());
+                return new FaceEmbeddingResponse(true, "Successfully processed selfie image", matchedMomentIds, faces.size(), matchedMomentIds.size());
+            } finally {
+                java.nio.file.Files.deleteIfExists(tempFile.toPath());
+            }
+        } catch (Exception e) {
+            logger.error("Error processing selfie image: {}", e.getMessage(), e);
+            return new FaceEmbeddingResponse(false, "Error processing selfie: " + e.getMessage(), new ArrayList<>(), 0, 0);
+        }
+    }
+}

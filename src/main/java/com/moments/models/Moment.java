@@ -33,6 +33,8 @@ public class Moment {
 
     private boolean isLiked;
 
+    private List<String> taggedUserIds = new ArrayList<>();
+
     // Getters and Setters
     public long getAspectRatio() {
         return aspectRatio;
@@ -143,9 +145,19 @@ public class Moment {
         this.isLiked = b;
     }
 
+
+    public List<String> getTaggedUserIds() {
+        return taggedUserIds;
+    }
+
+    public void setTaggedUserIds(List<String> taggedUserIds) {
+        this.taggedUserIds = taggedUserIds;
+    }
+
     public boolean isLiked() {
         return isLiked;
     }
+
 }
 
 class CreatorDetails {
