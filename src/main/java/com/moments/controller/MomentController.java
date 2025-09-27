@@ -74,7 +74,7 @@ public class MomentController {
     @PostMapping("/feed")
     public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken){
         try {
-            if(fcmToken != null && request.getCursor()==null){
+            if(request.getUserId()!=null && fcmToken != null && request.getCursor()==null){
                 notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
             }
             MomentsResponse response = new MomentsResponse(new ArrayList<>(), null);
