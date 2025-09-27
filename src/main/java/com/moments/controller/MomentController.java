@@ -2,6 +2,7 @@ package com.moments.controller;
 
 import com.moments.models.*;
 import com.moments.service.MomentService;
+import com.moments.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,9 @@ public class MomentController {
 
     @Autowired
     private MomentService momentService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     // Create or Update a Moment
     @PostMapping
@@ -67,8 +71,15 @@ public class MomentController {
     }
 
     @PostMapping("/feed")
-    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request){
+    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken
+    , @RequestHeader java.util.Map<String, String> headers){
         try {
+            System.out.println("Feed API Call ::::::::::::::::::");
+            System.out.println("FCMToken: " + fcmToken);
+            System.out.println("Headers: " + headers.toString());
+            if(fcmToken != null && request.getCursor()==null){
+                notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
+            }
             MomentsResponse response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(), request.getUserId());
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
         } catch (ExecutionException  | InterruptedException e){
