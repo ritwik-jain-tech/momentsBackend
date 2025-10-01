@@ -10,6 +10,13 @@ public class OTPRequest {
     private Timestamp expiryTimestamp;
     private String eventId;
 
+    public OTPRequest(String phoneNumber, int otp, long timestamp, Timestamp expiryTimestamp) {
+        this.phoneNumber = phoneNumber;
+        this.otp = otp;
+        this.timestamp = timestamp;
+        this.expiryTimestamp = expiryTimestamp;
+    }
+
     public Timestamp getExpiryTimestamp() {
         return expiryTimestamp;
     }
@@ -22,11 +29,8 @@ public class OTPRequest {
         return eventId;
     }
 
-    public OTPRequest(String phoneNumber, int otp, long timestamp, Timestamp expiryTimestamp) {
-        this.phoneNumber = phoneNumber;
-        this.otp = otp;
-        this.timestamp = timestamp;
-        this.expiryTimestamp = expiryTimestamp;
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
     }
 
     public OTPRequest() {

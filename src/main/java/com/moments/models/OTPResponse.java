@@ -4,12 +4,20 @@ public class OTPResponse {
     private boolean success;
     private String token;
     private UserProfile userProfile;
+    private Boolean UserInEvent;
 
     public OTPResponse(boolean success, String token) {
         this.success = success;
         this.token = token;
     }
 
+    public Boolean getUserInEvent() {
+        return UserInEvent;
+    }
+
+    public void setUserInEvent(Boolean userInEvent) {
+        UserInEvent = userInEvent;
+    }
 
     public UserProfile getUserProfile() {
         return userProfile;

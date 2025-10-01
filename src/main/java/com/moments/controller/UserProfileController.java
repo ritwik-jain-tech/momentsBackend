@@ -24,9 +24,7 @@ public class UserProfileController {
     @PostMapping("/create")
     public ResponseEntity<BaseResponse> createUserProfile(@RequestBody UserProfile userProfile) {
         try {
-            if(userProfile.getRole()==null){
-                userProfile.setRole(Role.USER);
-            }
+            boolean isGroomSide = userProfile.getSide() != null && userProfile.getSide().equals("groom");
             if(userProfile.getEventIds()==null || userProfile.getEventIds().isEmpty()){
 
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new BaseResponse("EventId can not be null or empty",HttpStatus.BAD_REQUEST, null));
@@ -38,10 +36,18 @@ public class UserProfileController {
             if(userProfileExisting==null){
                 String userId = userProfileService.createUser(userProfile).toString();
                 userProfile.setUserId(userId);
-                userProfileService.addUserToEvent(userId, userProfile.getEventIds().get(0));
+                if(userProfile.getRole()==null){
+                    userProfile.setRole(Role.USER);
+                }
+                userProfileService.addUserToEvent(userId, userProfile.getEventIds().get(0), isGroomSide);
                 return ResponseEntity.status(HttpStatus.CREATED).body(new BaseResponse("Success", HttpStatus.CREATED, userProfile));
             } else {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(new BaseResponse("Success", HttpStatus.CONFLICT, userProfileExisting));
+                if(userProfileExisting.getEventIds()!=null && userProfileExisting.getEventIds().contains(userProfile.getEventIds().get(0))){
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(new BaseResponse("Success", HttpStatus.CONFLICT, userProfileExisting));
+                } else {
+                    userProfileService.addUserToEvent(userProfileExisting.getUserId(), userProfile.getEventIds().get(0), isGroomSide);
+                    return ResponseEntity.status(HttpStatus.CREATED).body(new BaseResponse("Success", HttpStatus.CREATED, userProfile));
+                }
             }
 
         } catch (ExecutionException | InterruptedException e) {
@@ -98,23 +104,7 @@ public class UserProfileController {
                 : ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, userProfile));
     }
 
-    @GetMapping("/verify/otp")
-    public ResponseEntity<BaseResponse> verifyOTP(@RequestParam String phoneNumber
-                                                    , @RequestParam String otp,
-                                                 @RequestParam String eventId) {
-        //TODO: Validate OTP
-        String userIdFromOTP = "1";
-        try {
-            if (userIdFromOTP != null) {
-                UserProfile userProfile = userProfileService.addUserToEvent(userIdFromOTP, eventId);
-                return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, userProfile));
-            }
-        }catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
 
-    }
-        return ResponseEntity.ok(null);
-    }
 
     @PostMapping("/block")
     public ResponseEntity<BaseResponse> blockUser(@RequestBody BlockRequest blockRequest) {

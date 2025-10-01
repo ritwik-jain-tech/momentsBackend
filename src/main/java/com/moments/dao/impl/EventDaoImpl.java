@@ -70,18 +70,29 @@ public class EventDaoImpl implements EventDao {
     }
 
     @Override
-    public Event addUserToEvent(String eventId, String userId) throws ExecutionException, InterruptedException {
+    public Event addUserToEvent(String eventId, String userId, Boolean isGroomSide) throws ExecutionException, InterruptedException {
         try {
             Event event = getEventById(eventId);
-            List<String> userIds = event.getUserIds();
-            if(userIds==null){
-                userIds = new ArrayList<>();
-            }
+            List<String> userIds = event.getUserIds()==null?new ArrayList<>():event.getUserIds();
+            List<String> groomSide = event.getGroomSide()==null?new ArrayList<>():event.getGroomSide();
+            List<String> brideSide = event.getBrideSide()==null?new ArrayList<>():event.getUserIds();
+
             if (!userIds.contains(userId)) {
                 userIds.add(userId);
                 event.setUserIds(userIds);
                 saveEvent(event);
             }
+            if(isGroomSide && !groomSide.contains(userId)){
+                groomSide.add(userId);
+                event.setGroomSide(groomSide);
+                saveEvent(event);
+            }
+            if(!isGroomSide && !brideSide.contains(userId)){
+                brideSide.add(userId);
+                event.setBrideSide(brideSide);
+                saveEvent(event);
+            }
+
             return event;
         } catch (Exception e){
             e.printStackTrace();

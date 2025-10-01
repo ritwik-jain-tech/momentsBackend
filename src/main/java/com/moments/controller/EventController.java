@@ -94,9 +94,9 @@ public class EventController {
     }
 
     @GetMapping("/addUser")
-    public ResponseEntity<BaseResponse> addUser(@RequestParam String userId, @RequestParam String eventId) {
+    public ResponseEntity<BaseResponse> addUser(@RequestParam String userId, @RequestParam String eventId, @RequestParam boolean isGroomSide) {
         try{
-            Event event = eventService.addUserToEvent(userId, eventId);
+            Event event = eventService.addUserToEvent(userId, eventId, isGroomSide);
             if(event != null){
                 return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success adding user", HttpStatus.OK, event));
             }

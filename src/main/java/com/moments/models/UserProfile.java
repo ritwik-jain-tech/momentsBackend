@@ -12,6 +12,15 @@ public class UserProfile {
     private List<String> blockedUserIds;
     private List<Event> eventDetails;
     private String fcmToken;
+    private String side;
+
+    public String getSide() {
+        return side;
+    }
+
+    public void setSide(String side) {
+        this.side = side;
+    }
 
     public List<Event> getEventDetails() {
         return eventDetails;

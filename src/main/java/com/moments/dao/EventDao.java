@@ -15,7 +15,7 @@ public interface EventDao {
 
     void deleteEvent(String id) throws ExecutionException, InterruptedException;
 
-    Event addUserToEvent(String eventId, String userId) throws ExecutionException, InterruptedException;
+    Event addUserToEvent(String eventId, String userId, Boolean isGroomSide) throws ExecutionException, InterruptedException;
 
     List<String> getUserIdsInEvent(String eventId) throws ExecutionException, InterruptedException;
 

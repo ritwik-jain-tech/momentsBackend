@@ -63,9 +63,9 @@ public class EventService {
         eventDao.deleteEvent(id);
     }
 
-    public Event addUserToEvent(String userId, String eventId) throws ExecutionException, InterruptedException {
+    public Event addUserToEvent(String userId, String eventId, Boolean isGroomSide) throws ExecutionException, InterruptedException {
         UserProfile userProfile = userProfileDao.addUserToEvent(userId, eventId);
-        Event event = eventDao.addUserToEvent(eventId, userId);
+        Event event = eventDao.addUserToEvent(eventId, userId, isGroomSide);
         return event;
     }
 

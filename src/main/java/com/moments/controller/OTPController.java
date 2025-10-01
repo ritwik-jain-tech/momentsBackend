@@ -37,15 +37,14 @@ public class OTPController {
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest, 
-                                                 @RequestHeader(value = "fcm-token", required = false) String fcmToken,
-                                                 @RequestHeader java.util.Map<String, String> headers) {
+    public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest) {
         try {
             OTPResponse otpResponse = otpService.verifyOtp(otpRequest.getPhoneNumber(), otpRequest.getOtp());
             UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
             if (otpResponse.isSuccess()) {
                 if( userProfile != null) {
                     otpResponse.setUserProfile(userProfile);
+                    otpResponse.setUserInEvent(otpRequest.getEventId()!=null && userProfile.getEventIds()!=null && userProfile.getEventIds().contains(otpRequest.getEventId()));
                     return ResponseEntity.ok(new BaseResponse("OTP verified successfully, User Profile Exists", HttpStatus.OK, otpResponse));
 
                 } else {
