@@ -72,8 +72,10 @@ public class MomentController {
     }
 
     @PostMapping("/feed")
-    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken){
+    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken,
+                                                       @RequestHeader java.util.Map<String, String> headers){
         try {
+            System.out.println("Headers: " + headers.toString());
             if(request.getUserId()!=null && fcmToken != null && request.getCursor()==null){
                 notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
             }
