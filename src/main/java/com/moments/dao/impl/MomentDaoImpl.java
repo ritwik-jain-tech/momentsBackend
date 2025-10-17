@@ -134,6 +134,43 @@ public class MomentDaoImpl implements MomentDao {
     }
 
     @Override
+    public List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit)
+            throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
+
+        query = query.whereEqualTo("status", "APPROVED");
+        if (eventId != null && !eventId.isEmpty()) {
+            query = query.whereEqualTo("eventId", eventId);
+        }
+
+        // Fetch all documents matching the query
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+        // Filter by taggedUserId and collect all matching moments
+        List<Moment> allMatchingMoments = new ArrayList<>();
+        for (QueryDocumentSnapshot document : documents) {
+            Moment moment = document.toObject(Moment.class);
+            // Check if taggedUserId is present in the moment's taggedUserIds list
+            if (moment.getTaggedUserIds() != null && moment.getTaggedUserIds().contains(taggedUserId)) {
+                allMatchingMoments.add(moment);
+            }
+        }
+
+        // Apply pagination to the filtered results
+        List<Moment> moments = new ArrayList<>();
+        int startIndex = Math.min(offset, allMatchingMoments.size());
+        int endIndex = Math.min(startIndex + limit, allMatchingMoments.size());
+
+        for (int i = startIndex; i < endIndex; i++) {
+            moments.add(allMatchingMoments.get(i));
+        }
+
+        return moments;
+    }
+
+    @Override
     public int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection;
@@ -149,6 +186,33 @@ public class MomentDaoImpl implements MomentDao {
         // Count all matching documents
         ApiFuture<QuerySnapshot> future = query.get();
         return future.get().size();
+    }
+
+    @Override
+    public int getTotalCountByTaggedUser(String taggedUserId, String eventId)
+            throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection;
+
+        if (eventId != null && !eventId.isEmpty()) {
+            query = query.whereEqualTo("eventId", eventId);
+        }
+
+        // Fetch all documents matching the query
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+        // Filter by taggedUserId and count
+        int count = 0;
+        for (QueryDocumentSnapshot document : documents) {
+            Moment moment = document.toObject(Moment.class);
+            // Check if taggedUserId is present in the moment's taggedUserIds list
+            if (moment.getTaggedUserIds() != null && moment.getTaggedUserIds().contains(taggedUserId)) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     @Override

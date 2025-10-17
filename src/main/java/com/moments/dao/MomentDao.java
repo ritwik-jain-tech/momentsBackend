@@ -21,7 +21,13 @@ public interface MomentDao {
     List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit)
             throws ExecutionException, InterruptedException;
 
+    List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit)
+            throws ExecutionException, InterruptedException;
+
     int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException;
+
+    int getTotalCountByTaggedUser(String taggedUserId, String eventId)
+            throws ExecutionException, InterruptedException;
 
     boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException;
 

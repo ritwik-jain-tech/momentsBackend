@@ -130,10 +130,8 @@ public class MomentController {
 
     @PostMapping("/feed")
     public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request,
-            @RequestHeader(value = "fcm_token", required = false) String fcmToken,
-            @RequestHeader java.util.Map<String, String> headers) {
+            @RequestHeader(value = "fcm_token", required = false) String fcmToken) {
         try {
-            System.out.println("Headers: " + headers.toString());
             if (request.getUserId() != null && fcmToken != null && request.getCursor() == null) {
                 notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
             }
@@ -147,6 +145,7 @@ public class MomentController {
                 response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(),
                         request.getUserId());
             }
+
             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, response));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

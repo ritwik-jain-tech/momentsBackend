@@ -5,10 +5,19 @@ import java.util.List;
 public class MomentsResponse {
     private List<Moment> moments;
     private Cursor cursor;
+    private boolean isReUploadRequired;
 
     public MomentsResponse(List<Moment> moments, Cursor cursor) {
         this.moments = moments;
         this.cursor = cursor;
+    }
+
+    public boolean isReUploadRequired() {
+        return isReUploadRequired;
+    }
+
+    public void setReUploadRequired(boolean reUploadRequired) {
+        isReUploadRequired = reUploadRequired;
     }
 
     public List<Moment> getMoments() {

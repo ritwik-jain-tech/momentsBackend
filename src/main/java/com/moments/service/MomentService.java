@@ -139,17 +139,42 @@ public class MomentService {
         int limit = cursor == null ? 20 : cursor.getLimit();
         int offset = cursor == null ? 0 : cursor.getOffset();
         String creatorId = filter == null ? null : filter.getCreatedById();
+        String taggedUserId = filter == null ? null : filter.getTaggedUserId();
         String source = filter == null ? null : filter.getSource();
-        List<Moment> moments = Objects.equals(source, "web") ? momentDao.getAllMoments(eventId)
-                : momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
+
+        List<Moment> moments;
+        int totalCount;
+
+        if (Objects.equals(source, "web")) {
+            moments = momentDao.getAllMoments(eventId);
+            totalCount = moments.size();
+        } else if (taggedUserId != null && !taggedUserId.isEmpty()) {
+            // Use tagged user filter (creatorId and taggedUserId are mutually exclusive)
+            moments = momentDao.getMomentsFeedByTaggedUser(taggedUserId, eventId, offset, limit);
+            totalCount = momentDao.getTotalCountByTaggedUser(taggedUserId, eventId);
+        } else if (creatorId != null && !creatorId.isEmpty()) {
+            // Use creator filter (default feed with creator filter)
+            moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
+            totalCount = momentDao.getTotalCount(creatorId, eventId);
+        } else {
+            // Default feed (no filters)
+            moments = momentDao.getMomentsFeed(null, eventId, offset, limit);
+            totalCount = momentDao.getTotalCount(null, eventId);
+        }
+
         for (Moment moment : moments) {
             moment.setIsLiked(moment.getLikedBy() != null && moment.getLikedBy().contains(userId));
         }
-        int totalCount = momentDao.getTotalCount(creatorId, eventId);
+
         boolean isLastPage = moments.size() < limit;
         Long lastMomentCreationTime = moments.isEmpty() ? null : moments.get(moments.size() - 1).getCreationTime();
         Cursor cursorOut = new Cursor(totalCount, offset + moments.size(), limit, lastMomentCreationTime, isLastPage);
-        return new MomentsResponse(moments, cursorOut);
+        MomentsResponse momentsResponse =  new MomentsResponse(moments, cursorOut);
+
+        if(taggedUserId != null && !taggedUserId.isEmpty()){
+            momentsResponse.setReUploadRequired(false);
+        }
+        return momentsResponse;
     }
 
     private String epocToString(Long epoc) {
