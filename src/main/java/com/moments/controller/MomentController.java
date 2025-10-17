@@ -1,16 +1,33 @@
 package com.moments.controller;
 
-import com.moments.models.*;
-import com.moments.service.MomentService;
-import com.moments.service.NotificationService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.moments.models.BaseResponse;
+import com.moments.models.LikeRequest;
+import com.moments.models.LikedMomentsRequest;
+import com.moments.models.Moment;
+import com.moments.models.MomentsRequest;
+import com.moments.models.MomentsResponse;
+import com.moments.models.ReportRequest;
+import com.moments.models.UpdateMomentStatusRequest;
+import com.moments.service.MomentService;
+import com.moments.service.NotificationService;
 
 @RestController
 @RequestMapping("/api/moments")
@@ -28,22 +45,59 @@ public class MomentController {
         try {
             String result = momentService.saveMoment(moment);
             return ResponseEntity.status(HttpStatus.OK)
-                    .body(new BaseResponse("Created moment with Id : "+result,HttpStatus.OK,moment));
+                    .body(new BaseResponse("Created moment with Id : " + result, HttpStatus.OK, moment));
 
         } catch (ExecutionException | InterruptedException e) {
-           return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                   .body(new BaseResponse("Failed to create moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,moment));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to create moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, moment));
         }
     }
 
     @PostMapping("/batch")
     public ResponseEntity<BaseResponse> createOrUpdateMoments(@RequestBody List<Moment> moments) {
         try {
-            List<String> results = momentService.saveMoments(moments); // Implement this method in the service
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Created moment with IDs: " + results,HttpStatus.OK,null));
+            if (moments == null || moments.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("No moments provided for bulk save", HttpStatus.BAD_REQUEST, null));
+            }
+
+            List<String> results = momentService.saveMoments(moments);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse(
+                            "Successfully created " + results.size() + " moments atomically with IDs: " + results,
+                            HttpStatus.OK, results));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to create moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to create moments atomically - database error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Unexpected error during atomic bulk save: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    @PostMapping("/batch-non-atomic")
+    public ResponseEntity<BaseResponse> createOrUpdateMomentsNonAtomic(@RequestBody List<Moment> moments) {
+        try {
+            if (moments == null || moments.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("No moments provided for bulk save", HttpStatus.BAD_REQUEST, null));
+            }
+
+            List<String> results = momentService.saveMomentsNonAtomic(moments);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Successfully created " + results.size() + " moments with IDs: " + results,
+                            HttpStatus.OK, results));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to create moments - database error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Unexpected error during bulk save: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
@@ -52,10 +106,12 @@ public class MomentController {
     public ResponseEntity<BaseResponse> getMomentById(@PathVariable String id) {
         try {
             Moment moment = momentService.getMomentById(id);
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Moment with Id : "+id,HttpStatus.OK,moment));
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Moment with Id : " + id, HttpStatus.OK, moment));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
@@ -64,33 +120,38 @@ public class MomentController {
     public ResponseEntity<?> getAllMoments() {
         try {
             List<Moment> moments = momentService.getAllMoments();
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,moments));
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, moments));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
     @PostMapping("/feed")
-    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request, @RequestHeader(value = "fcm_token", required = false) String fcmToken,
-                                                       @RequestHeader java.util.Map<String, String> headers){
+    public ResponseEntity<BaseResponse> getMomentsFeed(@RequestBody MomentsRequest request,
+            @RequestHeader(value = "fcm_token", required = false) String fcmToken,
+            @RequestHeader java.util.Map<String, String> headers) {
         try {
             System.out.println("Headers: " + headers.toString());
-            if(request.getUserId()!=null && fcmToken != null && request.getCursor()==null){
+            if (request.getUserId() != null && fcmToken != null && request.getCursor() == null) {
                 notificationService.saveOrUpdateFCMToken(request.getUserId(), fcmToken);
             }
             MomentsResponse response = new MomentsResponse(new ArrayList<>(), null);
-            if(request.getFilter()!=null && request.getFilter().getLikedById()!=null){
-                //Liked Feed
-                 response = momentService.getLikedMomentsFeed(request.getFilter().getLikedById(), request.getEventId(), request.getCursor());
-            }else {
-                //Default feed
-                  response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(), request.getUserId());
+            if (request.getFilter() != null && request.getFilter().getLikedById() != null) {
+                // Liked Feed
+                response = momentService.getLikedMomentsFeed(request.getFilter().getLikedById(), request.getEventId(),
+                        request.getCursor());
+            } else {
+                // Default feed
+                response = momentService.findMoments(request.getEventId(), request.getFilter(), request.getCursor(),
+                        request.getUserId());
             }
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
-        } catch (ExecutionException  | InterruptedException e){
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, response));
+        } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
@@ -99,22 +160,25 @@ public class MomentController {
     public ResponseEntity<BaseResponse> deleteMoment(@PathVariable String id) {
         try {
             momentService.deleteMoment(id);
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,null));
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, null));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
     @PostMapping("/report")
-    public ResponseEntity<BaseResponse> reportMoment(@RequestBody ReportRequest reportRequest){
-         try{
-             boolean status = momentService.reportMoment(reportRequest);
-             return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Report status: "+ status,HttpStatus.OK,status));
-         } catch (ExecutionException | InterruptedException e) {
-             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                     .body(new BaseResponse("Failed to get moment error: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
-         }
+    public ResponseEntity<BaseResponse> reportMoment(@RequestBody ReportRequest reportRequest) {
+        try {
+            boolean status = momentService.reportMoment(reportRequest);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Report status: " + status, HttpStatus.OK, status));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
     }
 
     @PatchMapping("/status")
@@ -126,7 +190,7 @@ public class MomentController {
                     .body(new BaseResponse("Moment status updated successfully", HttpStatus.OK, result));
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to update moment status: " + e.getMessage(), 
+                    .body(new BaseResponse("Failed to update moment status: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -135,24 +199,28 @@ public class MomentController {
     }
 
     @PostMapping("/like")
-    public ResponseEntity<BaseResponse> likeMoment(@RequestBody LikeRequest likeRequest){
-        try{
+    public ResponseEntity<BaseResponse> likeMoment(@RequestBody LikeRequest likeRequest) {
+        try {
             boolean status = momentService.likeMoment(likeRequest);
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Like status: "+ status,HttpStatus.OK,status));
-        } catch (Exception  e) {
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Like status: " + status, HttpStatus.OK, status));
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to like moment: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to like moment: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR,
+                            null));
         }
     }
 
     @PostMapping("/liked-feed")
-    public ResponseEntity<BaseResponse> getLikedMomentsFeed(@RequestBody LikedMomentsRequest request){
+    public ResponseEntity<BaseResponse> getLikedMomentsFeed(@RequestBody LikedMomentsRequest request) {
         try {
-            MomentsResponse response = momentService.getLikedMomentsFeed(request.getUserId(), request.getEventId(), request.getCursor());
-            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success",HttpStatus.OK,response));
-        } catch (ExecutionException | InterruptedException e){
+            MomentsResponse response = momentService.getLikedMomentsFeed(request.getUserId(), request.getEventId(),
+                    request.getCursor());
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, response));
+        } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to get liked moments: "+e.getMessage(),HttpStatus.INTERNAL_SERVER_ERROR,null));
+                    .body(new BaseResponse("Failed to get liked moments: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 
@@ -165,14 +233,16 @@ public class MomentController {
             // Parse moment from JSON
             com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
             Moment moment = objectMapper.readValue(momentJson, Moment.class);
-            
+
             String result = momentService.saveMomentWithFaceRecognition(moment, imageFile);
             return ResponseEntity.status(HttpStatus.OK)
-                    .body(new BaseResponse("Created moment with face recognition, Id: " + result, HttpStatus.OK, moment));
+                    .body(new BaseResponse("Created moment with face recognition, Id: " + result, HttpStatus.OK,
+                            moment));
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to create moment with face recognition, error: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+                    .body(new BaseResponse("Failed to create moment with face recognition, error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 }

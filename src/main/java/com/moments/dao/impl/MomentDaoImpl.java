@@ -1,19 +1,29 @@
 package com.moments.dao.impl;
 
-import com.google.api.core.ApiFuture;
-import com.google.cloud.firestore.*;
-import com.moments.dao.MomentDao;
-import com.moments.models.Moment;
-import com.moments.models.MomentStatus;
-import com.moments.models.ReportRequest;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Repository;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Repository;
+
+import com.google.api.core.ApiFuture;
+import com.google.cloud.firestore.CollectionReference;
+import com.google.cloud.firestore.DocumentReference;
+import com.google.cloud.firestore.DocumentSnapshot;
+import com.google.cloud.firestore.FieldValue;
+import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.Query;
+import com.google.cloud.firestore.QueryDocumentSnapshot;
+import com.google.cloud.firestore.QuerySnapshot;
+import com.google.cloud.firestore.WriteBatch;
+import com.google.cloud.firestore.WriteResult;
+import com.moments.dao.MomentDao;
+import com.moments.models.Moment;
+import com.moments.models.MomentStatus;
+import com.moments.models.ReportRequest;
 
 @Repository
 public class MomentDaoImpl implements MomentDao {
@@ -70,7 +80,7 @@ public class MomentDaoImpl implements MomentDao {
     public List<Moment> getAllMoments(String eventId) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
-        if(eventId != null && !eventId.isEmpty()) {
+        if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
         }
         // Fetch all documents matching the query
@@ -93,12 +103,13 @@ public class MomentDaoImpl implements MomentDao {
     }
 
     @Override
-    public List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit) throws ExecutionException, InterruptedException {
+    public List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit)
+            throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
 
         query = query.whereEqualTo("status", "APPROVED");
-        if(eventId != null && !eventId.isEmpty()) {
+        if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
         }
 
@@ -106,7 +117,6 @@ public class MomentDaoImpl implements MomentDao {
         if (creatorUserId != null && !creatorUserId.isEmpty()) {
             query = query.whereEqualTo("creatorId", creatorUserId);
         }
-
 
         // Fetch all documents matching the query
         ApiFuture<QuerySnapshot> future = query.get();
@@ -123,13 +133,12 @@ public class MomentDaoImpl implements MomentDao {
         return moments;
     }
 
-
     @Override
     public int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection;
 
-        if(eventId != null && !eventId.isEmpty()) {
+        if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
         }
 
@@ -145,16 +154,16 @@ public class MomentDaoImpl implements MomentDao {
     @Override
     public boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException {
         Moment moment = getMomentById(request.getMomentId());
-        if(moment==null){
+        if (moment == null) {
             return false;
         }
-        if(moment.getReportedBy()==null){
+        if (moment.getReportedBy() == null) {
             moment.setReportedBy(new ArrayList<>());
         }
-        String report = request.getReportingUserId()+ " : "+ request.getEventId()+" : "+ request.getReason();
-        if(!moment.getReportedBy().contains(report)){
+        String report = request.getReportingUserId() + " : " + request.getEventId() + " : " + request.getReason();
+        if (!moment.getReportedBy().contains(report)) {
             moment.getReportedBy().add(report);
-            if(moment.getReportedBy().size()>0){
+            if (moment.getReportedBy().size() > 0) {
                 moment.setStatus(MomentStatus.PENDING);
             }
             saveMoment(moment);
@@ -164,7 +173,8 @@ public class MomentDaoImpl implements MomentDao {
     }
 
     @Override
-    public String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException {
+    public String updateMomentStatus(String momentId, MomentStatus status)
+            throws ExecutionException, InterruptedException {
         DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(momentId);
         DocumentSnapshot document = docRef.get().get();
 
@@ -183,23 +193,23 @@ public class MomentDaoImpl implements MomentDao {
         if (momentIds == null || momentIds.isEmpty()) {
             return new ArrayList<>();
         }
-        
+
         // Create a map to store moments by their momentId for quick lookup
         Map<String, Moment> momentMap = new HashMap<>();
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
-        
+
         // Firestore doesn't support "IN" queries with more than 10 values
         // So we need to batch the requests
         int batchSize = 10;
         for (int i = 0; i < momentIds.size(); i += batchSize) {
             int endIndex = Math.min(i + batchSize, momentIds.size());
             List<String> batch = momentIds.subList(i, endIndex);
-            
+
             // Use "in" query for each batch
             Query query = collection.whereIn("momentId", batch);
             ApiFuture<QuerySnapshot> future = query.get();
             List<QueryDocumentSnapshot> documents = future.get().getDocuments();
-            
+
             for (QueryDocumentSnapshot document : documents) {
                 Moment moment = document.toObject(Moment.class);
                 if (moment != null) {
@@ -207,7 +217,7 @@ public class MomentDaoImpl implements MomentDao {
                 }
             }
         }
-        
+
         // Return moments in the same order as the requested momentIds
         List<Moment> orderedMoments = new ArrayList<>();
         for (String momentId : momentIds) {
@@ -216,12 +226,36 @@ public class MomentDaoImpl implements MomentDao {
                 orderedMoments.add(moment);
             }
         }
-        
+
         return orderedMoments;
     }
 
+    @Override
+    public List<String> saveMomentsBatch(List<Moment> moments) throws ExecutionException, InterruptedException {
+        if (moments == null || moments.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Validate batch size - must be less than 50 moments
+        if (moments.size() >= 50) {
+            throw new IllegalArgumentException("Batch size must be less than 50 moments. Received: " + moments.size());
+        }
+
+        // Create a single batch operation
+        WriteBatch batchWrite = firestore.batch();
+        List<String> allIds = new ArrayList<>();
+
+        for (Moment moment : moments) {
+            DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(moment.getMomentId());
+            batchWrite.set(docRef, moment);
+            allIds.add(moment.getMomentId());
+        }
+
+        // Commit the batch
+        ApiFuture<List<WriteResult>> future = batchWrite.commit();
+        future.get(); // This will throw an exception if any operation in the batch fails
+
+        return allIds;
+    }
 
 }
-
-
-
