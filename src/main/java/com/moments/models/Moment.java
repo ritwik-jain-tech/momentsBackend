@@ -44,7 +44,6 @@ public class Moment {
         this.aspectRatio = aspectRatio;
     }
 
-
     public List<String> getReportedBy() {
         return reportedBy;
     }
@@ -145,6 +144,9 @@ public class Moment {
         this.isLiked = b;
     }
 
+    public boolean isLiked() {
+        return isLiked;
+    }
 
     public List<String> getTaggedUserIds() {
         return taggedUserIds;
@@ -153,78 +155,4 @@ public class Moment {
     public void setTaggedUserIds(List<String> taggedUserIds) {
         this.taggedUserIds = taggedUserIds;
     }
-
-    public boolean isLiked() {
-        return isLiked;
-    }
-
-}
-
-class CreatorDetails {
-
-    public String getUserId() {
-        return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
-
-    public String getUserName() {
-        return userName;
-    }
-
-    public void setUserName(String userName) {
-        this.userName = userName;
-    }
-
-    private String userId;
-    private String userName;
-}
-
-
-
-class Media {
-    private String url;
-    private MediaType type;
-    private Integer width ;
-    private Integer height ;
-
-    public Integer getWidth() {
-        return width;
-    }
-
-    public void setWidth(Integer width) {
-        this.width = width;
-    }
-
-    public Integer getHeight() {
-        return height;
-    }
-
-    public void setHeight(Integer height) {
-        this.height = height;
-    }
-
-    public String getUrl() {
-        return url;
-    }
-
-    public void setUrl(String url) {
-        this.url = url;
-    }
-
-    public MediaType getType() {
-        return type;
-    }
-
-    public void setType(MediaType type) {
-        this.type = type;
-    }
-
-}
-
-enum MediaType {
-    IMAGE,
-    VIDEO
 }

@@ -13,6 +13,7 @@ public class UserProfile {
     private List<Event> eventDetails;
     private String fcmToken;
     private String side;
+    private String selfie;
 
     public String getSide() {
         return side;
@@ -87,6 +88,14 @@ public class UserProfile {
         this.fcmToken = fcmToken;
     }
 
+    public String getSelfie() {
+        return selfie;
+    }
+
+    public void setSelfie(String selfie) {
+        this.selfie = selfie;
+    }
+
     @Override
     public String toString() {
         return "UserProfile{" +
@@ -96,6 +105,7 @@ public class UserProfile {
                 ", role=" + role +
                 ", eventIds=" + eventIds +
                 ", fcmToken='" + fcmToken + '\'' +
+                ", selfie='" + selfie + '\'' +
                 '}';
     }
 }

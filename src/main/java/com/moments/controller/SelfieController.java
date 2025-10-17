@@ -1,7 +1,12 @@
 package com.moments.controller;
 
 import com.moments.models.BaseResponse;
+import com.moments.models.FileType;
+import com.moments.models.FileUploadResponse;
+import com.moments.models.UserProfile;
+import com.moments.service.GoogleCloudStorageService;
 import com.moments.service.UserFaceEmbeddingService;
+import com.moments.service.UserProfileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +24,12 @@ public class SelfieController {
     
     @Autowired
     private UserFaceEmbeddingService userFaceEmbeddingService;
+
+    @Autowired
+    private GoogleCloudStorageService googleCloudStorageService;
+    
+    @Autowired
+    private UserProfileService userProfileService;
     
     @PostMapping("/upload")
     public ResponseEntity<BaseResponse> uploadSelfie(
@@ -46,13 +57,27 @@ public class SelfieController {
                 return ResponseEntity.badRequest()
                     .body(new BaseResponse("Failed to process selfie - no face detected or processing error", HttpStatus.BAD_REQUEST, null));
             }
+
+            // Upload image to cloud storage and get public URL
+            FileUploadResponse uploadResponse = googleCloudStorageService.uploadFile(imageFile, FileType.IMAGE);
+            String selfieUrl = uploadResponse.getPublicUrl();
             
-            logger.info("Selfie processing completed successfully for userId: {}, embeddingId: {}", userId, embeddingId);
+            // Update user profile with selfie URL
+            UserProfile userProfile = userProfileService.getUser(userId);
+            if (userProfile != null) {
+                userProfile.setSelfie(selfieUrl);
+                userProfileService.updateUser(userProfile);
+                logger.info("Updated user profile with selfie URL for userId: {}", userId);
+            } else {
+                logger.warn("User profile not found for userId: {}", userId);
+            }
+            
+            logger.info("Selfie processing completed successfully for userId: {}, embeddingId: {}, selfieUrl: {}", userId, embeddingId, selfieUrl);
             
             return ResponseEntity.ok(new BaseResponse(
                 "Selfie uploaded and face embedding saved successfully", 
                 HttpStatus.OK, 
-                new SelfieUploadResponse(embeddingId, userId)
+                new SelfieUploadResponse(embeddingId, userId, selfieUrl)
             ));
             
         } catch (Exception e) {
@@ -70,10 +95,12 @@ public class SelfieController {
     public static class SelfieUploadResponse {
         private String embeddingId;
         private String userId;
+        private String selfieUrl;
         
-        public SelfieUploadResponse(String embeddingId, String userId) {
+        public SelfieUploadResponse(String embeddingId, String userId, String selfieUrl) {
             this.embeddingId = embeddingId;
             this.userId = userId;
+            this.selfieUrl = selfieUrl;
         }
         
         public String getEmbeddingId() {
@@ -90,6 +117,14 @@ public class SelfieController {
         
         public void setUserId(String userId) {
             this.userId = userId;
+        }
+        
+        public String getSelfieUrl() {
+            return selfieUrl;
+        }
+        
+        public void setSelfieUrl(String selfieUrl) {
+            this.selfieUrl = selfieUrl;
         }
     }
 }
