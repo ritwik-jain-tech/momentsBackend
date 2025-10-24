@@ -6,17 +6,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import com.moments.dao.LikeDao;
 import com.moments.dao.MomentDao;
 import com.moments.models.Cursor;
-import com.moments.models.FaceEmbeddingResponse;
 import com.moments.models.Like;
 import com.moments.models.LikeRequest;
 import com.moments.models.Moment;
@@ -28,6 +29,8 @@ import com.moments.models.ReportRequest;
 @Service
 public class MomentService {
 
+    private static final Logger logger = LoggerFactory.getLogger(MomentService.class);
+
     @Autowired
     private MomentDao momentDao;
 
@@ -35,7 +38,7 @@ public class MomentService {
     private LikeDao likeDao;
 
     @Autowired
-    private FaceRecognitionService faceRecognitionService;
+    private FaceTaggingService faceTaggingService;
 
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
@@ -47,7 +50,13 @@ public class MomentService {
         moment.setCreationTimeText(epocToString(moment.getCreationTime()));
         moment.setUploadTimeText(epocToString(moment.getUploadTime()));
         moment.setMomentId(generateMomentId(moment.getCreatorId()));
-        return momentDao.saveMoment(moment);
+
+        String momentId = momentDao.saveMoment(moment);
+
+        // Trigger face tagging service call (async with fail safety) - non-blocking
+        triggerFaceTaggingForMoment(momentId, moment);
+
+        return momentId;
     }
 
     public List<String> saveMoments(List<Moment> moments) throws ExecutionException, InterruptedException {
@@ -92,7 +101,17 @@ public class MomentService {
         }
 
         // Use batch operation for atomicity
-        return momentDao.saveMomentsBatch(moments);
+        List<String> results = momentDao.saveMomentsBatch(moments);
+
+        // Trigger face tagging service calls (async with fail safety) for each moment -
+        // non-blocking
+        for (int i = 0; i < moments.size() && i < results.size(); i++) {
+            Moment moment = moments.get(i);
+            String momentId = results.get(i);
+            triggerFaceTaggingForMoment(momentId, moment);
+        }
+
+        return results;
     }
 
     // Helper method to split large batches into smaller ones
@@ -169,9 +188,9 @@ public class MomentService {
         boolean isLastPage = moments.size() < limit;
         Long lastMomentCreationTime = moments.isEmpty() ? null : moments.get(moments.size() - 1).getCreationTime();
         Cursor cursorOut = new Cursor(totalCount, offset + moments.size(), limit, lastMomentCreationTime, isLastPage);
-        MomentsResponse momentsResponse =  new MomentsResponse(moments, cursorOut);
+        MomentsResponse momentsResponse = new MomentsResponse(moments, cursorOut);
 
-        if(taggedUserId != null && !taggedUserId.isEmpty()){
+        if (taggedUserId != null && !taggedUserId.isEmpty()) {
             momentsResponse.setReUploadRequired(false);
         }
         return momentsResponse;
@@ -249,33 +268,28 @@ public class MomentService {
         return new MomentsResponse(likedMoments, cursorOut);
     }
 
-    // Process moment with face recognition
-    public String saveMomentWithFaceRecognition(Moment moment, MultipartFile imageFile)
-            throws ExecutionException, InterruptedException {
-        // First save the moment
-        String momentId = saveMoment(moment);
-
-        // Process face recognition if image is provided
-        if (imageFile != null && !imageFile.isEmpty()) {
-            try {
-                FaceEmbeddingResponse faceResponse = faceRecognitionService.processMomentImage(imageFile, momentId);
-                if (faceResponse.isSuccess() && !faceResponse.getTaggedUserIds().isEmpty()) {
-                    // Update moment with tagged users
-                    moment.setTaggedUserIds(faceResponse.getTaggedUserIds());
-                    momentDao.saveMoment(moment);
-
-                    // Log the results
-                    org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MomentService.class);
-                    logger.info("Face recognition completed for moment {}: {} faces detected, {} users tagged",
-                            momentId, faceResponse.getFacesDetected(), faceResponse.getTaggedUserIds().size());
+    /**
+     * Trigger face tagging service call for a moment (non-blocking)
+     * This method runs face tagging in background without affecting the main API
+     * response
+     */
+    private void triggerFaceTaggingForMoment(String momentId, Moment moment) {
+        if (moment.getEventId() != null && !moment.getEventId().trim().isEmpty() &&
+                moment.getMedia() != null && moment.getMedia().getUrl() != null
+                && !moment.getMedia().getUrl().trim().isEmpty()) {
+            // Fire and forget - runs in background thread
+            CompletableFuture.runAsync(() -> {
+                try {
+                    faceTaggingService.processMomentAsync(momentId, moment.getMedia().getUrl(), moment.getEventId());
+                } catch (Exception e) {
+                    // Log error but don't fail the main moment creation process
+                    logger.error("Face tagging service call failed for moment, momentId: {}, eventId: {}, error: {}",
+                            momentId, moment.getEventId(), e.getMessage(), e);
                 }
-            } catch (Exception e) {
-                org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(MomentService.class);
-                logger.error("Face recognition failed for moment {}: {}", momentId, e.getMessage(), e);
-                // Continue without face recognition - don't fail the moment creation
-            }
+            });
+        } else {
+            logger.warn("Missing eventId or imageUrl for moment, skipping face tagging service call for momentId: {}",
+                    momentId);
         }
-
-        return momentId;
     }
 }

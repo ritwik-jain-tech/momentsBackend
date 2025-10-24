@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,7 +17,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.moments.models.BaseResponse;
@@ -32,6 +33,8 @@ import com.moments.service.NotificationService;
 @RestController
 @RequestMapping("/api/moments")
 public class MomentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(MomentController.class);
 
     @Autowired
     private MomentService momentService;
@@ -108,7 +111,7 @@ public class MomentController {
             Moment moment = momentService.getMomentById(id);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(new BaseResponse("Moment with Id : " + id, HttpStatus.OK, moment));
-        } catch (ExecutionException | InterruptedException e) {
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
@@ -223,25 +226,4 @@ public class MomentController {
         }
     }
 
-    // Create a Moment with Face Recognition
-    @PostMapping("/with-face-recognition")
-    public ResponseEntity<BaseResponse> createMomentWithFaceRecognition(
-            @RequestParam("imageFile") org.springframework.web.multipart.MultipartFile imageFile,
-            @RequestParam("moment") String momentJson) {
-        try {
-            // Parse moment from JSON
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            Moment moment = objectMapper.readValue(momentJson, Moment.class);
-
-            String result = momentService.saveMomentWithFaceRecognition(moment, imageFile);
-            return ResponseEntity.status(HttpStatus.OK)
-                    .body(new BaseResponse("Created moment with face recognition, Id: " + result, HttpStatus.OK,
-                            moment));
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to create moment with face recognition, error: " + e.getMessage(),
-                            HttpStatus.INTERNAL_SERVER_ERROR, null));
-        }
-    }
 }
