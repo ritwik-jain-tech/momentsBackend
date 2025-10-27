@@ -95,9 +95,7 @@ public class SelfieController {
                     HttpStatus.OK,
                     result));
             else
-                return ResponseEntity.ok(new BaseResponse(
-                        result.getMessage(), HttpStatus.BAD_REQUEST, result
-                ));
+                return ResponseEntity.badRequest().body(new BaseResponse(result.getMessage(), HttpStatus.BAD_REQUEST, result));
 
         } catch (Exception e) {
             logger.error("Error processing selfie: {}", e.getMessage(), e);
