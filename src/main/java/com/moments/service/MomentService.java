@@ -53,6 +53,8 @@ public class MomentService {
 
         String momentId = momentDao.saveMoment(moment);
 
+        logger.info("Successfully saved moment {} to database, triggering face tagging", momentId);
+
         // Trigger face tagging service call (async with fail safety) - non-blocking
         triggerFaceTaggingForMoment(momentId, moment);
 
@@ -103,13 +105,26 @@ public class MomentService {
         // Use batch operation for atomicity
         List<String> results = momentDao.saveMomentsBatch(moments);
 
+        logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
+
         // Trigger face tagging service calls (async with fail safety) for each moment -
-        // non-blocking
-        for (int i = 0; i < moments.size() && i < results.size(); i++) {
-            Moment moment = moments.get(i);
-            String momentId = results.get(i);
-            triggerFaceTaggingForMoment(momentId, moment);
-        }
+        // non-blocking - with small delay to ensure DB commit
+        CompletableFuture.runAsync(() -> {
+            try {
+                // Small delay to ensure database transaction is fully committed
+                Thread.sleep(100);
+
+                for (int i = 0; i < moments.size() && i < results.size(); i++) {
+                    Moment moment = moments.get(i);
+                    String momentId = results.get(i);
+                    triggerFaceTaggingForMoment(momentId, moment);
+                }
+
+                logger.info("Triggered face tagging for {} moments", results.size());
+            } catch (Exception e) {
+                logger.error("Error triggering face tagging for batch: {}", e.getMessage(), e);
+            }
+        });
 
         return results;
     }
@@ -125,6 +140,27 @@ public class MomentService {
 
             List<String> batchIds = momentDao.saveMomentsBatch(batch);
             allIds.addAll(batchIds);
+
+            logger.info("Successfully saved batch of {} moments to database", batchIds.size());
+
+            // Trigger face tagging for this batch after it's saved - with delay to ensure
+            // DB commit
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // Small delay to ensure database transaction is fully committed
+                    Thread.sleep(100);
+
+                    for (int j = 0; j < batch.size() && j < batchIds.size(); j++) {
+                        Moment moment = batch.get(j);
+                        String momentId = batchIds.get(j);
+                        triggerFaceTaggingForMoment(momentId, moment);
+                    }
+
+                    logger.info("Triggered face tagging for batch of {} moments", batchIds.size());
+                } catch (Exception e) {
+                    logger.error("Error triggering face tagging for batch: {}", e.getMessage(), e);
+                }
+            });
         }
 
         return allIds;
@@ -274,13 +310,28 @@ public class MomentService {
      * response
      */
     private void triggerFaceTaggingForMoment(String momentId, Moment moment) {
+        // Validate required fields
+        if (momentId == null || momentId.trim().isEmpty()) {
+            logger.warn("Invalid momentId provided for face tagging, skipping");
+            return;
+        }
+
+        if (moment == null) {
+            logger.warn("Null moment provided for face tagging, momentId: {}, skipping", momentId);
+            return;
+        }
+
         if (moment.getEventId() != null && !moment.getEventId().trim().isEmpty() &&
                 moment.getMedia() != null && moment.getMedia().getUrl() != null
                 && !moment.getMedia().getUrl().trim().isEmpty()) {
+
+            logger.info("Triggering face tagging for moment: {}, eventId: {}", momentId, moment.getEventId());
+
             // Fire and forget - runs in background thread
             CompletableFuture.runAsync(() -> {
                 try {
                     faceTaggingService.processMomentAsync(momentId, moment.getMedia().getUrl(), moment.getEventId());
+                    logger.info("Face tagging service call completed for moment: {}", momentId);
                 } catch (Exception e) {
                     // Log error but don't fail the main moment creation process
                     logger.error("Face tagging service call failed for moment, momentId: {}, eventId: {}, error: {}",
