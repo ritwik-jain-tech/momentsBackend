@@ -1,9 +1,9 @@
 package com.moments.service;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -180,53 +180,11 @@ public class FaceTaggingService {
         }
     }
 
-    /**
-     * Asynchronously process moment for face tagging
-     * This method runs in background and won't block the main moment creation
-     * process
-     */
-    @Async
-    public CompletableFuture<Void> processMomentAsync(String momentId, String imageUrl, String eventId) {
-        logger.info("Starting async moment processing for moment: {}, event: {}", momentId, eventId);
-
-        try {
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("moment_id", momentId);
-            requestBody.put("image_url", imageUrl);
-            requestBody.put("event_id", eventId);
-            requestBody.put("match_faces", true);
-
-            String jsonRequest = objectMapper.writeValueAsString(requestBody);
-
-            HttpPost httpPost = new HttpPost(faceTaggingServiceUrl + "/api/v1/face-embeddings/moment/process");
-            httpPost.setHeader("Content-Type", "application/json");
-            httpPost.setEntity(new StringEntity(jsonRequest));
-
-            logger.info("Calling face tagging service for moment processing: {}", jsonRequest);
-
-            try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
-                int statusCode = response.getStatusLine().getStatusCode();
-                String responseBody = EntityUtils.toString(response.getEntity());
-
-                if (statusCode >= 200 && statusCode < 300) {
-                    logger.info("Moment processing successful for moment: {}, response: {}", momentId, responseBody);
-                } else {
-                    logger.warn("Moment processing failed for moment: {}, status: {}, response: {}",
-                            momentId, statusCode, responseBody);
-                }
-            }
-
-        } catch (Exception e) {
-            logger.error("Error processing moment for moment: {}, error: {}", momentId, e.getMessage(), e);
-            // Don't throw exception - fail silently to not break the main flow
-        }
-
-        return CompletableFuture.completedFuture(null);
-    }
 
     /**
      * Asynchronously process multiple moments in batch for face tagging
-     * This method runs in background and won't block the main moment creation process
+     * This method runs in background and won't block the main moment creation
+     * process
      */
     @Async
     public CompletableFuture<Void> processMomentsBatchAsync(List<Moment> moments) {
@@ -252,12 +210,6 @@ public class FaceTaggingService {
                     momentRequest.put("image_url", moment.getMedia().getUrl());
                     momentRequest.put("event_id", moment.getEventId());
                     momentRequest.put("match_faces", true);
-                    
-                    // user_id is optional, only add if available
-                    if (moment.getCreatorId() != null && !moment.getCreatorId().trim().isEmpty()) {
-                        momentRequest.put("user_id", moment.getCreatorId());
-                    }
-
                     momentsList.add(momentRequest);
                 } else {
                     logger.warn("Skipping moment {} due to missing eventId or imageUrl", moment.getMomentId());
@@ -283,7 +235,7 @@ public class FaceTaggingService {
                 String responseBody = EntityUtils.toString(response.getEntity());
 
                 if (statusCode >= 200 && statusCode < 300) {
-                    logger.info("Batch moment processing successful for {} moments, response: {}", 
+                    logger.info("Batch moment processing successful for {} moments, response: {}",
                             momentsList.size(), responseBody);
                 } else {
                     logger.warn("Batch moment processing failed, status: {}, response: {}",

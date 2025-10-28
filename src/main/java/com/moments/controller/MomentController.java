@@ -81,29 +81,6 @@ public class MomentController {
         }
     }
 
-    @PostMapping("/batch-non-atomic")
-    public ResponseEntity<BaseResponse> createOrUpdateMomentsNonAtomic(@RequestBody List<Moment> moments) {
-        try {
-            if (moments == null || moments.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(new BaseResponse("No moments provided for bulk save", HttpStatus.BAD_REQUEST, null));
-            }
-
-            List<String> results = momentService.saveMomentsNonAtomic(moments);
-            return ResponseEntity.status(HttpStatus.OK)
-                    .body(new BaseResponse("Successfully created " + results.size() + " moments with IDs: " + results,
-                            HttpStatus.OK, results));
-        } catch (ExecutionException | InterruptedException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Failed to create moments - database error: " + e.getMessage(),
-                            HttpStatus.INTERNAL_SERVER_ERROR, null));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new BaseResponse("Unexpected error during bulk save: " + e.getMessage(),
-                            HttpStatus.INTERNAL_SERVER_ERROR, null));
-        }
-    }
-
     // Get a Moment by ID
     @GetMapping("/{id}")
     public ResponseEntity<BaseResponse> getMomentById(@PathVariable String id) {

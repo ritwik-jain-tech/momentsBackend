@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -56,31 +57,12 @@ public class MomentService {
         logger.info("Successfully saved moment {} to database, triggering face tagging", momentId);
 
         // Trigger face tagging service call (async with fail safety) - non-blocking
-        triggerFaceTaggingForMoment(momentId, moment);
+        faceTaggingService.processMomentsBatchAsync(Collections.singletonList(moment));
 
         return momentId;
     }
 
     public List<String> saveMoments(List<Moment> moments) throws ExecutionException, InterruptedException {
-        // Use atomic batch operation by default
-        return saveMomentsBatch(moments);
-    }
-
-    // Non-atomic bulk save method that allows partial failures
-    public List<String> saveMomentsNonAtomic(List<Moment> moments) throws ExecutionException, InterruptedException {
-        List<String> ids = new ArrayList<>();
-
-        for (Moment moment : moments) {
-            String id = saveMoment(moment);
-            ids.add(id);
-        }
-
-        return ids;
-    }
-
-    // Atomic bulk save method using Firestore batch operations for better
-    // transaction handling
-    public List<String> saveMomentsBatch(List<Moment> moments) throws ExecutionException, InterruptedException {
         if (moments == null || moments.isEmpty()) {
             logger.warn("Empty or null moments list provided to saveMomentsBatch");
             return new ArrayList<>();
@@ -136,27 +118,17 @@ public class MomentService {
 
         logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
 
-        // Trigger face tagging service call (async with fail safety) for all moments in batch -
+        // Trigger face tagging service call (async with fail safety) for all moments in
+        // batch -
         // non-blocking - with small delay to ensure DB commit
         CompletableFuture.runAsync(() -> {
             try {
                 // Small delay to ensure database transaction is fully committed
-                Thread.sleep(100);
-
-                // Prepare moments for batch processing
-                List<Moment> momentsForFaceTagging = new ArrayList<>();
-                for (int i = 0; i < validMoments.size() && i < results.size(); i++) {
-                    Moment moment = validMoments.get(i);
-                    String momentId = results.get(i);
-                    
-                    // Update the moment with the actual momentId from database
-                    moment.setMomentId(momentId);
-                    momentsForFaceTagging.add(moment);
-                }
+                Thread.sleep(200);
 
                 // Single batch call instead of individual calls
-                faceTaggingService.processMomentsBatchAsync(momentsForFaceTagging);
-                logger.info("Triggered batch face tagging for {} moments", momentsForFaceTagging.size());
+                faceTaggingService.processMomentsBatchAsync(validMoments);
+                logger.info("Triggered batch face tagging for {} moments", validMoments.size());
             } catch (Exception e) {
                 logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
             }
@@ -190,21 +162,9 @@ public class MomentService {
                     try {
                         // Small delay to ensure database transaction is fully committed
                         Thread.sleep(100);
-
-                        // Prepare moments for batch processing
-                        List<Moment> momentsForFaceTagging = new ArrayList<>();
-                        for (int j = 0; j < batch.size() && j < batchIds.size(); j++) {
-                            Moment moment = batch.get(j);
-                            String momentId = batchIds.get(j);
-                            
-                            // Update the moment with the actual momentId from database
-                            moment.setMomentId(momentId);
-                            momentsForFaceTagging.add(moment);
-                        }
-
                         // Single batch call instead of individual calls
-                        faceTaggingService.processMomentsBatchAsync(momentsForFaceTagging);
-                        logger.info("Triggered batch face tagging for {} moments", momentsForFaceTagging.size());
+                        faceTaggingService.processMomentsBatchAsync(batch);
+                        logger.info("Triggered batch face tagging for {} moments", batch.size());
                     } catch (Exception e) {
                         logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
                     }
@@ -215,8 +175,8 @@ public class MomentService {
             }
         }
 
-        logger.info("Completed batch processing: {} total moments processed", allIds.size());
-        return allIds;
+    logger.info("Completed batch processing: {} total moments processed",allIds.size());return allIds;
+
     }
 
     public Boolean reportMoment(ReportRequest reportRequest) throws ExecutionException, InterruptedException {
@@ -357,43 +317,4 @@ public class MomentService {
         return new MomentsResponse(likedMoments, cursorOut);
     }
 
-    /**
-     * Trigger face tagging service call for a moment (non-blocking)
-     * This method runs face tagging in background without affecting the main API
-     * response
-     */
-    private void triggerFaceTaggingForMoment(String momentId, Moment moment) {
-        // Validate required fields
-        if (momentId == null || momentId.trim().isEmpty()) {
-            logger.warn("Invalid momentId provided for face tagging, skipping");
-            return;
-        }
-
-        if (moment == null) {
-            logger.warn("Null moment provided for face tagging, momentId: {}, skipping", momentId);
-            return;
-        }
-
-        if (moment.getEventId() != null && !moment.getEventId().trim().isEmpty() &&
-                moment.getMedia() != null && moment.getMedia().getUrl() != null
-                && !moment.getMedia().getUrl().trim().isEmpty()) {
-
-            logger.info("Triggering face tagging for moment: {}, eventId: {}", momentId, moment.getEventId());
-
-            // Fire and forget - runs in background thread
-            CompletableFuture.runAsync(() -> {
-                try {
-                    faceTaggingService.processMomentAsync(momentId, moment.getMedia().getUrl(), moment.getEventId());
-                    logger.info("Face tagging service call completed for moment: {}", momentId);
-                } catch (Exception e) {
-                    // Log error but don't fail the main moment creation process
-                    logger.error("Face tagging service call failed for moment, momentId: {}, eventId: {}, error: {}",
-                            momentId, moment.getEventId(), e.getMessage(), e);
-                }
-            });
-        } else {
-            logger.warn("Missing eventId or imageUrl for moment, skipping face tagging service call for momentId: {}",
-                    momentId);
-        }
-    }
 }
