@@ -82,28 +82,57 @@ public class MomentService {
     // transaction handling
     public List<String> saveMomentsBatch(List<Moment> moments) throws ExecutionException, InterruptedException {
         if (moments == null || moments.isEmpty()) {
+            logger.warn("Empty or null moments list provided to saveMomentsBatch");
             return new ArrayList<>();
         }
 
+        logger.info("Starting batch save for {} moments", moments.size());
+
         // Prepare all moments first
-        for (Moment moment : moments) {
-            moment.setUploadTime(Instant.now().toEpochMilli());
-            if (moment.getCreationTime() == null) {
-                moment.setCreationTime(moment.getUploadTime());
+        List<Moment> validMoments = new ArrayList<>();
+        for (int i = 0; i < moments.size(); i++) {
+            Moment moment = moments.get(i);
+            try {
+                moment.setUploadTime(Instant.now().toEpochMilli());
+                if (moment.getCreationTime() == null) {
+                    moment.setCreationTime(moment.getUploadTime());
+                }
+                moment.setStatus(MomentStatus.APPROVED);
+                moment.setCreationTimeText(epocToString(moment.getCreationTime()));
+                moment.setUploadTimeText(epocToString(moment.getUploadTime()));
+                moment.setMomentId(generateMomentId(moment.getCreatorId()));
+
+                // Validate required fields
+                if (moment.getCreatorId() == null || moment.getCreatorId().trim().isEmpty()) {
+                    logger.error("Moment {} has null/empty creatorId, skipping", i);
+                    continue;
+                }
+                if (moment.getMomentId() == null || moment.getMomentId().trim().isEmpty()) {
+                    logger.error("Moment {} has null/empty momentId after generation, skipping", i);
+                    continue;
+                }
+
+                validMoments.add(moment);
+                logger.debug("Prepared moment {}: id={}, creatorId={}", i, moment.getMomentId(), moment.getCreatorId());
+            } catch (Exception e) {
+                logger.error("Error preparing moment {}: {}", i, e.getMessage(), e);
             }
-            moment.setStatus(MomentStatus.APPROVED);
-            moment.setCreationTimeText(epocToString(moment.getCreationTime()));
-            moment.setUploadTimeText(epocToString(moment.getUploadTime()));
-            moment.setMomentId(generateMomentId(moment.getCreatorId()));
+        }
+
+        logger.info("Prepared {} valid moments out of {} total moments", validMoments.size(), moments.size());
+
+        if (validMoments.isEmpty()) {
+            logger.warn("No valid moments to save after preparation");
+            return new ArrayList<>();
         }
 
         // If batch size is 50 or more, split into smaller batches
-        if (moments.size() >= 50) {
-            return saveMomentsInBatches(moments);
+        if (validMoments.size() >= 50) {
+            return saveMomentsInBatches(validMoments);
         }
 
         // Use batch operation for atomicity
-        List<String> results = momentDao.saveMomentsBatch(moments);
+        List<String> results = momentDao.saveMomentsBatch(validMoments);
 
         logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
 
@@ -114,8 +143,8 @@ public class MomentService {
                 // Small delay to ensure database transaction is fully committed
                 Thread.sleep(100);
 
-                for (int i = 0; i < moments.size() && i < results.size(); i++) {
-                    Moment moment = moments.get(i);
+                for (int i = 0; i < validMoments.size() && i < results.size(); i++) {
+                    Moment moment = validMoments.get(i);
                     String momentId = results.get(i);
                     triggerFaceTaggingForMoment(momentId, moment);
                 }
@@ -134,35 +163,45 @@ public class MomentService {
         List<String> allIds = new ArrayList<>();
         int batchSize = 49; // Keep under 50 limit
 
+        logger.info("Processing {} moments in batches of {}", moments.size(), batchSize);
+
         for (int i = 0; i < moments.size(); i += batchSize) {
             int endIndex = Math.min(i + batchSize, moments.size());
             List<Moment> batch = moments.subList(i, endIndex);
 
-            List<String> batchIds = momentDao.saveMomentsBatch(batch);
-            allIds.addAll(batchIds);
+            logger.info("Processing batch {}: moments {} to {}", (i / batchSize) + 1, i, endIndex - 1);
 
-            logger.info("Successfully saved batch of {} moments to database", batchIds.size());
+            try {
+                List<String> batchIds = momentDao.saveMomentsBatch(batch);
+                allIds.addAll(batchIds);
 
-            // Trigger face tagging for this batch after it's saved - with delay to ensure
-            // DB commit
-            CompletableFuture.runAsync(() -> {
-                try {
-                    // Small delay to ensure database transaction is fully committed
-                    Thread.sleep(100);
+                logger.info("Successfully saved batch of {} moments to database", batchIds.size());
 
-                    for (int j = 0; j < batch.size() && j < batchIds.size(); j++) {
-                        Moment moment = batch.get(j);
-                        String momentId = batchIds.get(j);
-                        triggerFaceTaggingForMoment(momentId, moment);
+                // Trigger face tagging for this batch after it's saved - with delay to ensure
+                // DB commit
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        // Small delay to ensure database transaction is fully committed
+                        Thread.sleep(100);
+
+                        for (int j = 0; j < batch.size() && j < batchIds.size(); j++) {
+                            Moment moment = batch.get(j);
+                            String momentId = batchIds.get(j);
+                            triggerFaceTaggingForMoment(momentId, moment);
+                        }
+
+                        logger.info("Triggered face tagging for batch of {} moments", batchIds.size());
+                    } catch (Exception e) {
+                        logger.error("Error triggering face tagging for batch: {}", e.getMessage(), e);
                     }
-
-                    logger.info("Triggered face tagging for batch of {} moments", batchIds.size());
-                } catch (Exception e) {
-                    logger.error("Error triggering face tagging for batch: {}", e.getMessage(), e);
-                }
-            });
+                });
+            } catch (Exception e) {
+                logger.error("Error saving batch {}: {}", (i / batchSize) + 1, e.getMessage(), e);
+                // Continue with next batch even if this one fails
+            }
         }
 
+        logger.info("Completed batch processing: {} total moments processed", allIds.size());
         return allIds;
     }
 

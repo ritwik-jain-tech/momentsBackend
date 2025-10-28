@@ -89,13 +89,14 @@ public class SelfieController {
                         userId);
             }
 
-            if(result!=null && result.getHttpStatus()==200)
+            if (result != null && result.getHttpStatus() == 200)
                 return ResponseEntity.ok(new BaseResponse(
                     "Selfie uploaded and face embedding saved successfully",
                     HttpStatus.OK,
                     result));
             else
-                return ResponseEntity.badRequest().body(new BaseResponse(result.getMessage(), HttpStatus.BAD_REQUEST, result));
+                return ResponseEntity.badRequest()
+                        .body(new BaseResponse(result.getMessage(), HttpStatus.BAD_REQUEST, result));
 
         } catch (Exception e) {
             logger.error("Error processing selfie: {}", e.getMessage(), e);
