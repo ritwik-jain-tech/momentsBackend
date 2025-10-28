@@ -2,6 +2,8 @@ package com.moments.service;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moments.models.FaceTaggingResult;
+import com.moments.models.Moment;
 
 @Service
 public class FaceTaggingService {
@@ -215,6 +218,81 @@ public class FaceTaggingService {
 
         } catch (Exception e) {
             logger.error("Error processing moment for moment: {}, error: {}", momentId, e.getMessage(), e);
+            // Don't throw exception - fail silently to not break the main flow
+        }
+
+        return CompletableFuture.completedFuture(null);
+    }
+
+    /**
+     * Asynchronously process multiple moments in batch for face tagging
+     * This method runs in background and won't block the main moment creation process
+     */
+    @Async
+    public CompletableFuture<Void> processMomentsBatchAsync(List<Moment> moments) {
+        logger.info("Starting async batch moment processing for {} moments", moments.size());
+
+        try {
+            if (moments == null || moments.isEmpty()) {
+                logger.warn("Empty moments list provided for batch processing");
+                return CompletableFuture.completedFuture(null);
+            }
+
+            // Prepare batch request
+            Map<String, Object> batchRequest = new HashMap<>();
+            List<Map<String, Object>> momentsList = new ArrayList<>();
+
+            for (Moment moment : moments) {
+                if (moment.getEventId() != null && !moment.getEventId().trim().isEmpty() &&
+                        moment.getMedia() != null && moment.getMedia().getUrl() != null
+                        && !moment.getMedia().getUrl().trim().isEmpty()) {
+
+                    Map<String, Object> momentRequest = new HashMap<>();
+                    momentRequest.put("moment_id", moment.getMomentId());
+                    momentRequest.put("image_url", moment.getMedia().getUrl());
+                    momentRequest.put("event_id", moment.getEventId());
+                    momentRequest.put("match_faces", true);
+                    
+                    // user_id is optional, only add if available
+                    if (moment.getCreatorId() != null && !moment.getCreatorId().trim().isEmpty()) {
+                        momentRequest.put("user_id", moment.getCreatorId());
+                    }
+
+                    momentsList.add(momentRequest);
+                } else {
+                    logger.warn("Skipping moment {} due to missing eventId or imageUrl", moment.getMomentId());
+                }
+            }
+
+            if (momentsList.isEmpty()) {
+                logger.warn("No valid moments found for batch processing");
+                return CompletableFuture.completedFuture(null);
+            }
+
+            batchRequest.put("moments", momentsList);
+            String jsonRequest = objectMapper.writeValueAsString(batchRequest);
+
+            HttpPost httpPost = new HttpPost(faceTaggingServiceUrl + "/api/v1/face-embeddings/moments/batch");
+            httpPost.setHeader("Content-Type", "application/json");
+            httpPost.setEntity(new StringEntity(jsonRequest));
+
+            logger.info("Calling face tagging service for batch processing: {} moments", momentsList.size());
+
+            try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
+                int statusCode = response.getStatusLine().getStatusCode();
+                String responseBody = EntityUtils.toString(response.getEntity());
+
+                if (statusCode >= 200 && statusCode < 300) {
+                    logger.info("Batch moment processing successful for {} moments, response: {}", 
+                            momentsList.size(), responseBody);
+                } else {
+                    logger.warn("Batch moment processing failed, status: {}, response: {}",
+                            statusCode, responseBody);
+                }
+            }
+
+        } catch (Exception e) {
+            logger.error("Error processing moments batch, error: {}", e.getMessage(), e);
             // Don't throw exception - fail silently to not break the main flow
         }
 

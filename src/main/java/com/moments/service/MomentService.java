@@ -136,22 +136,29 @@ public class MomentService {
 
         logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
 
-        // Trigger face tagging service calls (async with fail safety) for each moment -
+        // Trigger face tagging service call (async with fail safety) for all moments in batch -
         // non-blocking - with small delay to ensure DB commit
         CompletableFuture.runAsync(() -> {
             try {
                 // Small delay to ensure database transaction is fully committed
                 Thread.sleep(100);
 
+                // Prepare moments for batch processing
+                List<Moment> momentsForFaceTagging = new ArrayList<>();
                 for (int i = 0; i < validMoments.size() && i < results.size(); i++) {
                     Moment moment = validMoments.get(i);
                     String momentId = results.get(i);
-                    triggerFaceTaggingForMoment(momentId, moment);
+                    
+                    // Update the moment with the actual momentId from database
+                    moment.setMomentId(momentId);
+                    momentsForFaceTagging.add(moment);
                 }
 
-                logger.info("Triggered face tagging for {} moments", results.size());
+                // Single batch call instead of individual calls
+                faceTaggingService.processMomentsBatchAsync(momentsForFaceTagging);
+                logger.info("Triggered batch face tagging for {} moments", momentsForFaceTagging.size());
             } catch (Exception e) {
-                logger.error("Error triggering face tagging for batch: {}", e.getMessage(), e);
+                logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
             }
         });
 
@@ -184,15 +191,22 @@ public class MomentService {
                         // Small delay to ensure database transaction is fully committed
                         Thread.sleep(100);
 
+                        // Prepare moments for batch processing
+                        List<Moment> momentsForFaceTagging = new ArrayList<>();
                         for (int j = 0; j < batch.size() && j < batchIds.size(); j++) {
                             Moment moment = batch.get(j);
                             String momentId = batchIds.get(j);
-                            triggerFaceTaggingForMoment(momentId, moment);
+                            
+                            // Update the moment with the actual momentId from database
+                            moment.setMomentId(momentId);
+                            momentsForFaceTagging.add(moment);
                         }
 
-                        logger.info("Triggered face tagging for batch of {} moments", batchIds.size());
+                        // Single batch call instead of individual calls
+                        faceTaggingService.processMomentsBatchAsync(momentsForFaceTagging);
+                        logger.info("Triggered batch face tagging for {} moments", momentsForFaceTagging.size());
                     } catch (Exception e) {
-                        logger.error("Error triggering face tagging for batch: {}", e.getMessage(), e);
+                        logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
                     }
                 });
             } catch (Exception e) {
