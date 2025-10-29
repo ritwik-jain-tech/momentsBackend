@@ -38,7 +38,9 @@ public class UserProfileService {
     }
 
     public UserProfile getUserProfileByPhoneNumber(String phoneNumber) throws ExecutionException, InterruptedException {
-        return userProfileDao.findByPhoneNumber(phoneNumber);
+        UserProfile userProfile = userProfileDao.findByPhoneNumber(phoneNumber);
+        userProfile.setEventDetails(eventDao.getEventsByIds(userProfile.getEventIds()));
+        return userProfile;
     }
 
     public UserProfile addUserToEvent(String userId, String eventId, Boolean isGroomSide) throws ExecutionException, InterruptedException {
