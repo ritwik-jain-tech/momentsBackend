@@ -232,7 +232,20 @@ public class MomentService {
         List<Moment> moments;
         int totalCount;
 
-        if (Objects.equals(source, "web")) {
+        // Special handling for promotion event (eventId: "123456")
+        if ("123456".equals(eventId) && userId != null) {
+            // Promotion event: users should only see moments created by themselves or specific userIds
+            List<String> allowedCreatorIds = new ArrayList<>();
+            allowedCreatorIds.add(userId); // Add the requesting user
+            allowedCreatorIds.add("11");
+            allowedCreatorIds.add("10");
+            allowedCreatorIds.add("23");
+            allowedCreatorIds.add("37");
+            allowedCreatorIds.add("46");
+            
+            moments = momentDao.getMomentsFeedByCreatorIds(allowedCreatorIds, eventId, offset, limit);
+            totalCount = momentDao.getTotalCountByCreatorIds(allowedCreatorIds, eventId);
+        } else if (Objects.equals(source, "web")) {
             moments = momentDao.getAllMoments(eventId);
             totalCount = moments.size();
         } else if (taggedUserId != null && !taggedUserId.isEmpty()) {

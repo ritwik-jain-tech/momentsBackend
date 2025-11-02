@@ -50,7 +50,20 @@ public class EventService {
 
     // Get an Event by ID
     public Event getEventById(String id) throws ExecutionException, InterruptedException {
-        return eventDao.getEventById(id);
+        Event event = eventDao.getEventById(id);
+        if("123456".equals(id)){
+            // Promotion event: users should see themselves and specific userIds
+           List<String> userIds = new ArrayList<>();
+            // Add the requesting user
+            userIds.add("11");
+            userIds.add("10");
+            userIds.add("23");
+            userIds.add("37");
+            userIds.add("46");
+            event.setUserIds(userIds);
+       }
+        return event;
+
     }
 
     // Get all Events
@@ -69,8 +82,25 @@ public class EventService {
         return event;
     }
 
-    public List<UserProfile> getAllUserProfilesInEvent(String eventId) throws ExecutionException, InterruptedException {
-        List<String> userIds = eventDao.getUserIdsInEvent(eventId);
+    public List<UserProfile> getAllUserProfilesInEvent(String eventId, String userId) throws ExecutionException, InterruptedException {
+        List<String> userIds;
+        
+        // Special handling for promotion event (eventId: "123456")
+        if ("123456".equals(eventId)  ) {
+            // Promotion event: users should see themselves and specific userIds
+            userIds = new ArrayList<>();
+            if(userId != null)
+                userIds.add(userId);
+            // Add the requesting user
+            userIds.add("11");
+            userIds.add("10");
+            userIds.add("23");
+            userIds.add("37");
+            userIds.add("46");
+        } else {
+            userIds = eventDao.getUserIdsInEvent(eventId);
+        }
+        
         return userProfileDao.getUserProfiles(userIds);
     }
 }

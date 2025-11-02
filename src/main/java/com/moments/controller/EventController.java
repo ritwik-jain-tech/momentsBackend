@@ -66,10 +66,11 @@ public class EventController {
     }
 
     @GetMapping("/users/{id}")
-    public ResponseEntity<BaseResponse> getUsersInEventById(@PathVariable String id)
+    public ResponseEntity<BaseResponse> getUsersInEventById(@PathVariable String id,
+            @RequestParam(value = "userId", required = false) String userId)
             throws ExecutionException, InterruptedException {
         try {
-            List<UserProfile> userProfiles = eventService.getAllUserProfilesInEvent(id);
+            List<UserProfile> userProfiles = eventService.getAllUserProfilesInEvent(id, userId);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(new BaseResponse("Success getting Users for Event", HttpStatus.OK, userProfiles));
 

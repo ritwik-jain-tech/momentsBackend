@@ -36,4 +36,9 @@ public interface MomentDao {
     List<Moment> getMomentsByIds(List<String> momentIds) throws ExecutionException, InterruptedException;
 
     List<String> saveMomentsBatch(List<Moment> moments) throws ExecutionException, InterruptedException;
+
+    List<Moment> getMomentsFeedByCreatorIds(List<String> creatorIds, String eventId, int offset, int limit)
+            throws ExecutionException, InterruptedException;
+
+    int getTotalCountByCreatorIds(List<String> creatorIds, String eventId) throws ExecutionException, InterruptedException;
 }

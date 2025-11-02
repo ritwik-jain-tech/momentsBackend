@@ -322,4 +322,72 @@ public class MomentDaoImpl implements MomentDao {
         return allIds;
     }
 
+    @Override
+    public List<Moment> getMomentsFeedByCreatorIds(List<String> creatorIds, String eventId, int offset, int limit)
+            throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        
+        // Firestore "in" queries are limited to 10 items per query
+        List<Moment> allMoments = new ArrayList<>();
+        int batchSize = 10;
+        
+        for (int i = 0; i < creatorIds.size(); i += batchSize) {
+            int endIndex = Math.min(i + batchSize, creatorIds.size());
+            List<String> batch = creatorIds.subList(i, endIndex);
+            
+            // Build query for this batch
+            Query batchQuery = collection.whereEqualTo("status", "APPROVED");
+            if (eventId != null && !eventId.isEmpty()) {
+                batchQuery = batchQuery.whereEqualTo("eventId", eventId);
+            }
+            batchQuery = batchQuery.whereIn("creatorId", batch);
+            
+            ApiFuture<QuerySnapshot> future = batchQuery.get();
+            List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+            
+            for (QueryDocumentSnapshot document : documents) {
+                allMoments.add(document.toObject(Moment.class));
+            }
+        }
+        
+        // Sort all moments by creationTime descending (since batches might not be in order)
+        allMoments.sort((m1, m2) -> Long.compare(m2.getCreationTime(), m1.getCreationTime()));
+        
+        // Apply pagination
+        List<Moment> moments = new ArrayList<>();
+        int startIndex = Math.min(offset, allMoments.size());
+        int endIndex = Math.min(startIndex + limit, allMoments.size());
+        for (int i = startIndex; i < endIndex; i++) {
+            moments.add(allMoments.get(i));
+        }
+
+        return moments;
+    }
+
+    @Override
+    public int getTotalCountByCreatorIds(List<String> creatorIds, String eventId) throws ExecutionException, InterruptedException {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection;
+
+        query = query.whereEqualTo("status", "APPROVED");
+        if (eventId != null && !eventId.isEmpty()) {
+            query = query.whereEqualTo("eventId", eventId);
+        }
+
+        // Firestore "in" queries are limited to 10 items per query
+        int totalCount = 0;
+        int batchSize = 10;
+        
+        for (int i = 0; i < creatorIds.size(); i += batchSize) {
+            int endIndex = Math.min(i + batchSize, creatorIds.size());
+            List<String> batch = creatorIds.subList(i, endIndex);
+            
+            Query batchQuery = query.whereIn("creatorId", batch);
+            ApiFuture<QuerySnapshot> future = batchQuery.get();
+            totalCount += future.get().size();
+        }
+        
+        return totalCount;
+    }
+
 }
