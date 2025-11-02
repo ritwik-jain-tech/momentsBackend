@@ -121,14 +121,16 @@ public class MomentService {
         // Trigger face tagging service call (async with fail safety) for all moments in
         // batch -
         // non-blocking - with small delay to ensure DB commit
+        // Create a copy for async processing to avoid any potential issues
+        final List<Moment> momentsForAsync = new ArrayList<>(validMoments);
         CompletableFuture.runAsync(() -> {
             try {
                 // Small delay to ensure database transaction is fully committed
                 Thread.sleep(200);
 
                 // Single batch call instead of individual calls
-                faceTaggingService.processMomentsBatchAsync(validMoments);
-                logger.info("Triggered batch face tagging for {} moments", validMoments.size());
+                faceTaggingService.processMomentsBatchAsync(momentsForAsync);
+                logger.info("Triggered batch face tagging for {} moments", momentsForAsync.size());
             } catch (Exception e) {
                 logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
             }
@@ -146,37 +148,50 @@ public class MomentService {
 
         for (int i = 0; i < moments.size(); i += batchSize) {
             int endIndex = Math.min(i + batchSize, moments.size());
-            List<Moment> batch = moments.subList(i, endIndex);
+            // Create a defensive copy instead of using subList() to avoid concurrent modification issues
+            List<Moment> batch = new ArrayList<>(moments.subList(i, endIndex));
 
             logger.info("Processing batch {}: moments {} to {}", (i / batchSize) + 1, i, endIndex - 1);
 
             try {
                 List<String> batchIds = momentDao.saveMomentsBatch(batch);
+                
+                if (batchIds == null || batchIds.size() != batch.size()) {
+                    logger.error("Batch save returned {} IDs but expected {} for batch {}", 
+                        batchIds != null ? batchIds.size() : 0, batch.size(), (i / batchSize) + 1);
+                }
+                
                 allIds.addAll(batchIds);
 
                 logger.info("Successfully saved batch of {} moments to database", batchIds.size());
 
                 // Trigger face tagging for this batch after it's saved - with delay to ensure
                 // DB commit
+                // Create a copy for async processing to avoid any potential issues
+                final List<Moment> batchForAsync = new ArrayList<>(batch);
                 CompletableFuture.runAsync(() -> {
                     try {
                         // Small delay to ensure database transaction is fully committed
                         Thread.sleep(100);
                         // Single batch call instead of individual calls
-                        faceTaggingService.processMomentsBatchAsync(batch);
-                        logger.info("Triggered batch face tagging for {} moments", batch.size());
+                        faceTaggingService.processMomentsBatchAsync(batchForAsync);
+                        logger.info("Triggered batch face tagging for {} moments", batchForAsync.size());
                     } catch (Exception e) {
                         logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
                     }
                 });
+            } catch (ExecutionException | InterruptedException e) {
+                logger.error("Error saving batch {}: {}", (i / batchSize) + 1, e.getMessage(), e);
+                // Re-throw ExecutionException and InterruptedException as they are declared exceptions
+                throw e;
             } catch (Exception e) {
                 logger.error("Error saving batch {}: {}", (i / batchSize) + 1, e.getMessage(), e);
-                // Continue with next batch even if this one fails
+                // Continue with next batch only for non-critical exceptions
             }
         }
 
-    logger.info("Completed batch processing: {} total moments processed",allIds.size());return allIds;
-
+        logger.info("Completed batch processing: {} total moments processed", allIds.size());
+        return allIds;
     }
 
     public Boolean reportMoment(ReportRequest reportRequest) throws ExecutionException, InterruptedException {
@@ -184,7 +199,11 @@ public class MomentService {
     }
 
     private String generateMomentId(String creatorId) {
-        return creatorId + "_" + epocToString(Instant.now().toEpochMilli());
+        // Include full epoch millisecond to ensure uniqueness even for moments created in the same second
+        // Add a small random component to further reduce collision risk in high-throughput scenarios
+        long epochMs = Instant.now().toEpochMilli();
+        int randomComponent = (int) (Math.random() * 1000); // 0-999
+        return creatorId + "_" + epochMs + "_" + randomComponent;
     }
 
     // Get a Moment by ID
