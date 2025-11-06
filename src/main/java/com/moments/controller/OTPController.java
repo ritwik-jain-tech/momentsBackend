@@ -48,6 +48,7 @@ public class OTPController {
                     return ResponseEntity.ok(new BaseResponse("OTP verified successfully, User Profile Exists", HttpStatus.OK, otpResponse));
 
                 } else {
+                    otpResponse.setUserInEvent(false);
                     return ResponseEntity.ok(new BaseResponse("OTP verified successfully, userProfile does not Exists", HttpStatus.OK, otpResponse));
                 }
             } else {

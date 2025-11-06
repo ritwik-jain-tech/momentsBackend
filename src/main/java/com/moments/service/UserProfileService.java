@@ -39,7 +39,6 @@ public class UserProfileService {
 
     public UserProfile getUserProfileByPhoneNumber(String phoneNumber) throws ExecutionException, InterruptedException {
         UserProfile userProfile = userProfileDao.findByPhoneNumber(phoneNumber);
-        userProfile.setEventDetails(eventDao.getEventsByIds(userProfile.getEventIds()));
         return userProfile;
     }
 
