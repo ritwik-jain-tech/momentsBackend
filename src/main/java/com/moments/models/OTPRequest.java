@@ -6,6 +6,7 @@ import com.google.cloud.Timestamp;
 public class OTPRequest {
     private String phoneNumber;
     private int otp;
+    private String otpCode; // String OTP code for verification API
     private long timestamp;
     private Timestamp expiryTimestamp;
     private String eventId;
@@ -59,6 +60,14 @@ public class OTPRequest {
 
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getOtpCode() {
+        return otpCode;
+    }
+
+    public void setOtpCode(String otpCode) {
+        this.otpCode = otpCode;
     }
 }
 

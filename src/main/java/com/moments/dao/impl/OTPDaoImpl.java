@@ -6,6 +6,7 @@ import com.google.cloud.firestore.*;
 import com.moments.dao.OTPDao;
 import com.moments.models.Moment;
 import com.moments.models.OTPRequest;
+import com.moments.models.OTPVerificationMapping;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -18,7 +19,8 @@ public class OTPDaoImpl implements OTPDao {
     @Autowired
     private Firestore firestore;
 
-private static final String COLLECTION_NAME = "otpCollection";
+    private static final String COLLECTION_NAME = "otpCollection";
+    private static final String VERIFICATION_MAPPING_COLLECTION = "otpVerificationMapping";
 
     @Override
     public void saveOtp(OTPRequest otpRequest) {
@@ -75,6 +77,36 @@ private static final String COLLECTION_NAME = "otpCollection";
             return document.toObject(OTPRequest.class);
         } else {
             return null;
+        }
+    }
+
+    @Override
+    public void saveVerificationMapping(OTPVerificationMapping mapping) {
+        try {
+            firestore.collection(VERIFICATION_MAPPING_COLLECTION)
+                    .document(mapping.getPhoneNumber())
+                    .set(mapping)
+                    .get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Error saving verification mapping", e);
+        }
+    }
+
+    @Override
+    public OTPVerificationMapping getVerificationMappingByPhoneNumber(String phoneNumber) {
+        try {
+            DocumentReference documentReference = firestore.collection(VERIFICATION_MAPPING_COLLECTION)
+                    .document(phoneNumber);
+            ApiFuture<DocumentSnapshot> future = documentReference.get();
+            DocumentSnapshot document = future.get();
+
+            if (document.exists()) {
+                return document.toObject(OTPVerificationMapping.class);
+            } else {
+                return null;
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Error fetching verification mapping", e);
         }
     }
 

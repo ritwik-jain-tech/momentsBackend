@@ -39,9 +39,14 @@ public class OTPController {
     @PostMapping("/verify")
     public ResponseEntity<BaseResponse> verifyOtp(@RequestBody OTPRequest otpRequest) {
         try {
-            OTPResponse otpResponse = otpService.verifyOtp(otpRequest.getPhoneNumber(), otpRequest.getOtp());
-            UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
+            // Use otpCode if provided, otherwise convert int otp to string
+            String otpCode = otpRequest.getOtpCode() != null ? otpRequest.getOtpCode() : String.valueOf(otpRequest.getOtp());
+            if(otpCode.length()>4){
+                otpCode= otpCode.substring(0,4);
+            }
+            OTPResponse otpResponse = otpService.verifyOtp(otpRequest.getPhoneNumber(), otpCode);
             if (otpResponse.isSuccess()) {
+                UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
                 if( userProfile != null) {
                     otpResponse.setUserProfile(userProfile);
                     otpResponse.setUserInEvent(otpRequest.getEventId()!=null && userProfile.getEventIds()!=null && userProfile.getEventIds().contains(otpRequest.getEventId()));
@@ -53,7 +58,7 @@ public class OTPController {
                 }
             } else {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(new BaseResponse("Invalid OTP", HttpStatus.UNAUTHORIZED, null));
+                        .body(new BaseResponse(otpResponse.getMessage(), HttpStatus.UNAUTHORIZED, null));
             }
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

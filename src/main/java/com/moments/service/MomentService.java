@@ -233,7 +233,7 @@ public class MomentService {
         int totalCount;
 
         // Special handling for promotion event (eventId: "123456")
-        if ("123456".equals(eventId) && userId != null) {
+        if ("123456".equals(eventId) && userId != null && taggedUserId==null) {
             // Promotion event: users should only see moments created by themselves or specific userIds
             List<String> allowedCreatorIds = new ArrayList<>();
             allowedCreatorIds.add(userId); // Add the requesting user
@@ -272,7 +272,7 @@ public class MomentService {
         MomentsResponse momentsResponse = new MomentsResponse(moments, cursorOut);
 
         if (taggedUserId != null && !taggedUserId.isEmpty()) {
-            momentsResponse.setReUploadRequired(false);
+            momentsResponse.setReUploadRequired(totalCount<1);
         }
         return momentsResponse;
     }

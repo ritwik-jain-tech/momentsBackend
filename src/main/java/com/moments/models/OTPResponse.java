@@ -5,10 +5,20 @@ public class OTPResponse {
     private String token;
     private UserProfile userProfile;
     private Boolean UserInEvent;
+    private String message;
 
-    public OTPResponse(boolean success, String token) {
+    public OTPResponse(boolean success, String token, String message) {
         this.success = success;
         this.token = token;
+        this.message = message;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public Boolean getUserInEvent() {
