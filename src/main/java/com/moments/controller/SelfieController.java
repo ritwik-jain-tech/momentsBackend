@@ -87,6 +87,8 @@ public class SelfieController {
             } else {
                 logger.warn("No eventId provided for selfie upload, skipping face tagging service call for userId: {}",
                         userId);
+
+                return ResponseEntity.badRequest().body(new BaseResponse("No eventId provided for selfie upload", HttpStatus.BAD_REQUEST, null));
             }
 
             if (result != null && result.getHttpStatus() == 200)
@@ -96,7 +98,7 @@ public class SelfieController {
                     result));
             else
                 return ResponseEntity.badRequest()
-                        .body(new BaseResponse(result.getMessage(), HttpStatus.BAD_REQUEST, result));
+                        .body(new BaseResponse("Face tagging failed!", HttpStatus.BAD_REQUEST, result));
 
         } catch (Exception e) {
             logger.error("Error processing selfie: {}", e.getMessage(), e);

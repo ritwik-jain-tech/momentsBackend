@@ -5,6 +5,8 @@ import com.moments.dao.UserProfileDao;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @Service
@@ -34,7 +36,11 @@ public class UserProfileService {
     }
 
     public void deleteUser(String userId) throws ExecutionException, InterruptedException {
+        UserProfile userProfile = userProfileDao.getUserProfile(userId);
+        List<String> eventIds = userProfile.getEventIds();
+        eventDao.deleteUserForEvents(userId, eventIds);
         userProfileDao.deleteUserProfile(userId);
+
     }
 
     public UserProfile getUserProfileByPhoneNumber(String phoneNumber) throws ExecutionException, InterruptedException {

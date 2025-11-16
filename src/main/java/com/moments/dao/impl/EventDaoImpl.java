@@ -142,6 +142,15 @@ public class EventDaoImpl implements EventDao {
         return events;
     }
 
+    @Override
+    public void deleteUserForEvents(String userId, List<String> eventIds) throws ExecutionException, InterruptedException {
+       List<Event> events = getEventsByIds(eventIds);
+       for (Event event : events) {
+           event.getUserIds().remove(userId);
+           saveEvent(event);
+       }
+    }
+
 
     public List<Event> getEventsByTimeRange(Long startTime, Long endTime) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
