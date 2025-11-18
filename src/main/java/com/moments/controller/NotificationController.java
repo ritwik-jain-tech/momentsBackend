@@ -39,6 +39,44 @@ public class NotificationController {
     }
 
     /**
+     * Broadcast notification to every user participating in an event
+     * @param notificationRequest contains eventId, body, and optional imageUrl
+     * @return ResponseEntity with details about delivery
+     */
+    @PostMapping("/send-event")
+    public ResponseEntity<BaseResponse> sendNotificationToEvent(@RequestBody NotificationRequest notificationRequest) {
+        if (notificationRequest.getEventId() == null || notificationRequest.getEventId().trim().isEmpty()
+                || notificationRequest.getBody() == null || notificationRequest.getBody().trim().isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse("eventId and body are required", HttpStatus.BAD_REQUEST, null));
+        }
+
+        try {
+            int successCount = notificationService.sendNotificationToEvent(
+                    notificationRequest.getEventId(),
+                    notificationRequest.getTitle(),
+                    notificationRequest.getBody(),
+                    notificationRequest.getImageUrl());
+
+            String message = String.format("Event notification sent to %d participants", successCount);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse(message, HttpStatus.OK, successCount));
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to send event notification: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Unexpected error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
      * Send notification to a single user
      * @param notificationRequest The notification request containing userId, title, and body
      * @return ResponseEntity with success or error message
@@ -116,4 +154,5 @@ public class NotificationController {
                     .body(new BaseResponse("Error sending test notification: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
+    
 }

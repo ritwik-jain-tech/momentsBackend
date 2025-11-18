@@ -5,6 +5,8 @@ public class NotificationRequest {
     private String title;
     private String body;
     private String[] userIds; // For sending to multiple users
+    private String eventId;
+    private String imageUrl;
 
     public NotificationRequest() {
     }
@@ -52,5 +54,21 @@ public class NotificationRequest {
 
     public void setUserIds(String[] userIds) {
         this.userIds = userIds;
+    }
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 }

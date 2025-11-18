@@ -1,6 +1,8 @@
 package com.moments.service;
 
+import com.moments.dao.EventDao;
 import com.moments.dao.UserProfileDao;
+import com.moments.models.Event;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -10,6 +12,9 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
 import com.google.firebase.messaging.FirebaseMessagingException;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 @Service
@@ -17,6 +22,9 @@ public class NotificationService {
 
     @Autowired
     private UserProfileDao userProfileDao;
+
+    @Autowired
+    private EventDao eventDao;
 
     @Autowired
     private FirebaseMessaging firebaseMessaging;
@@ -47,16 +55,25 @@ public class NotificationService {
      * @return true if notification was sent successfully, false otherwise
      */
     public boolean sendNotification(String userId, String title, String body) {
+        return sendNotification(userId, title, body, null);
+    }
+
+    public boolean sendNotification(String userId, String title, String body, String imageUrl) {
         try {
             UserProfile userProfile = userProfileDao.getUserProfile(userId);
             if (userProfile != null && userProfile.getFcmToken() != null && !userProfile.getFcmToken().isEmpty()) {
                 try {
+                    com.google.firebase.messaging.Notification.Builder notificationBuilder = Notification.builder()
+                            .setTitle(title)
+                            .setBody(body);
+
+                    if (imageUrl != null && !imageUrl.trim().isEmpty()) {
+                        notificationBuilder.setImage(imageUrl);
+                    }
+
                     Message message = Message.builder()
                             .setToken(userProfile.getFcmToken())
-                            .setNotification(Notification.builder()
-                                    .setTitle(title)
-                                    .setBody(body)
-                                    .build())
+                            .setNotification(notificationBuilder.build())
                             .build();
 
                     String response = firebaseMessaging.send(message);
@@ -119,6 +136,50 @@ public class NotificationService {
                 successCount++;
             }
         }
+        return successCount;
+    }
+
+    /**
+     * Broadcast notification to every participant in an event
+     * @param eventId The event identifier
+     * @param body Message body
+     * @param imageUrl Optional image URL to show in the notification
+     * @return Number of successful notifications
+     */
+    public int sendNotificationToEvent(String eventId, String title, String body, String imageUrl)
+            throws ExecutionException, InterruptedException {
+        if (eventId == null || eventId.trim().isEmpty()) {
+            throw new IllegalArgumentException("eventId is required");
+        }
+        Event event = eventDao.getEventById(eventId);
+        if (event == null) {
+            throw new RuntimeException("Event not found with ID: " + eventId);
+        }
+
+        List<String> userIds = event.getUserIds();
+        if (userIds == null || userIds.isEmpty()) {
+            userIds = eventDao.getUserIdsInEvent(eventId);
+        }
+
+        if (userIds == null || userIds.isEmpty()) {
+            return 0;
+        }
+
+        Set<String> uniqueUserIds = new HashSet<>(userIds);
+        if(title==null) {
+            title = event.getEventName() != null ? event.getEventName() : "Moments Event Update";
+        }
+        int successCount = 0;
+
+        for (String userId : uniqueUserIds) {
+            if (userId == null || userId.trim().isEmpty()) {
+                continue;
+            }
+            if (sendNotification(userId, title, body, imageUrl)) {
+                successCount++;
+            }
+        }
+
         return successCount;
     }
 

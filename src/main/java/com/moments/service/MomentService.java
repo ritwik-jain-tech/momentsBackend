@@ -41,6 +41,9 @@ public class MomentService {
     @Autowired
     private FaceTaggingService faceTaggingService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
         moment.setUploadTime(Instant.now().toEpochMilli());
@@ -67,6 +70,7 @@ public class MomentService {
             logger.warn("Empty or null moments list provided to saveMomentsBatch");
             return new ArrayList<>();
         }
+
 
         logger.info("Starting batch save for {} moments", moments.size());
 
@@ -133,6 +137,15 @@ public class MomentService {
                 logger.info("Triggered batch face tagging for {} moments", momentsForAsync.size());
             } catch (Exception e) {
                 logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
+            }
+        });
+
+        CompletableFuture.runAsync(()->{
+            try{
+                String eventId= moments.get(0).getEventId();
+                notificationService.sendNotificationToEvent(eventId,null,"New moments created", null);
+            } catch(Exception e){
+                logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);
             }
         });
 
