@@ -44,8 +44,9 @@ public class MessageCentralService {
      */
     public String sendOtp(String phoneNumber, String countryCode) throws Exception {
         String countryCodeToUse = countryCode != null && !countryCode.isEmpty() ? countryCode : defaultCountryCode;
-        if(countryCodeToUse.contains("+"))
-            countryCodeToUse = countryCodeToUse.substring(0, countryCodeToUse.indexOf("+"));
+        if (countryCodeToUse.contains("+")) {
+            countryCodeToUse = countryCodeToUse.replace("+", "");
+        }
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(baseUrl + "/send")
                 .queryParam("countryCode", countryCodeToUse)
                 .queryParam("customerId", customerId)
