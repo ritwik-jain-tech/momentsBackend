@@ -1,8 +1,10 @@
 package com.moments.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moments.dao.EventDao;
 import com.moments.dao.UserProfileDao;
 import com.moments.models.Event;
+import com.moments.models.Moment;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,9 @@ public class NotificationService {
 
     @Autowired
     private FirebaseMessaging firebaseMessaging;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     /**
      * Save or update FCM token for a user
@@ -241,5 +246,38 @@ public class NotificationService {
         }
         // Basic validation - FCM tokens are typically long strings
         return fcmToken.length() > 100 && fcmToken.matches("^[A-Za-z0-9_-]+$");
+    }
+
+    public Map<String, String> convertMomentToDataMap(com.moments.models.Moment moment) {
+        Map<String, String> dataMap = new HashMap<>();
+        try {
+            // Convert moment to JSON string and add to data map
+            String momentJson = objectMapper.writeValueAsString(moment);
+            dataMap.put("moment", momentJson);
+
+            // Also add individual fields for easier access on client side
+            if (moment.getMomentId() != null) {
+                dataMap.put("momentId", moment.getMomentId());
+            }
+            if (moment.getEventId() != null) {
+                dataMap.put("eventId", moment.getEventId());
+            }
+            if (moment.getCreatorId() != null) {
+                dataMap.put("creatorId", moment.getCreatorId());
+            }
+            if (moment.getMedia() != null && moment.getMedia().getUrl() != null) {
+                dataMap.put("mediaUrl", moment.getMedia().getUrl());
+            }
+        } catch (Exception e) {
+            // Fallback: if JSON conversion fails, add basic fields
+            System.err.println("Error converting moment to JSON: " + e.getMessage());
+            if (moment.getMomentId() != null) {
+                dataMap.put("momentId", moment.getMomentId());
+            }
+            if (moment.getEventId() != null) {
+                dataMap.put("eventId", moment.getEventId());
+            }
+        }
+        return dataMap;
     }
 }

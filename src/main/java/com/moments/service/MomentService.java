@@ -145,8 +145,7 @@ public class MomentService {
         CompletableFuture.runAsync(()->{
             try{
                 String eventId= moments.get(0).getEventId();
-                java.util.Map<String, Object> data = new java.util.HashMap<>();
-                data.put("moment", moments.get(0));
+                java.util.Map<String, String> data = notificationService.convertMomentToDataMap(moments.get(0));
                 notificationService.sendNotificationToEvent(eventId,null,"New moments created", null, data);
             } catch(Exception e){
                 logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);
@@ -341,8 +340,7 @@ public class MomentService {
             CompletableFuture.runAsync(()->{
                 try{
                     UserProfile userProfile = userProfileService.getUser(userId);
-                    java.util.Map<String, Object> data = new java.util.HashMap<>();
-                    data.put("moment", moment);
+                    java.util.Map<String, String> data = notificationService.convertMomentToDataMap(moment);
                     notificationService.sendNotification(moment.getCreatorId(), null, "♥️" + userProfile.getName() + " added your moment to favourites!", null, data);
                 } catch(Exception e){
                     logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);

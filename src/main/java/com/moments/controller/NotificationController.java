@@ -27,8 +27,7 @@ public class NotificationController {
     @Autowired
     private MomentService momentService;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+
 
     /**
      * Save or update FCM token for a user
@@ -192,7 +191,7 @@ public class NotificationController {
             }
 
             // Convert moment to Map<String, String> for FCM data
-            Map<String, String> momentData = convertMomentToDataMap(moment);
+            Map<String, String> momentData = notificationService.convertMomentToDataMap(moment);
 
             // Get creator name for notification title
             String creatorName = moment.getCreatorDetails() != null && moment.getCreatorDetails().getUserName() != null
@@ -227,42 +226,6 @@ public class NotificationController {
         }
     }
 
-    /**
-     * Convert Moment object to Map<String, String> for FCM data field
-     * @param moment The moment to convert
-     * @return Map containing moment data as strings
-     */
-    private Map<String, String> convertMomentToDataMap(Moment moment) {
-        Map<String, String> dataMap = new HashMap<>();
-        try {
-            // Convert moment to JSON string and add to data map
-            String momentJson = objectMapper.writeValueAsString(moment);
-            dataMap.put("moment", momentJson);
-            
-            // Also add individual fields for easier access on client side
-            if (moment.getMomentId() != null) {
-                dataMap.put("momentId", moment.getMomentId());
-            }
-            if (moment.getEventId() != null) {
-                dataMap.put("eventId", moment.getEventId());
-            }
-            if (moment.getCreatorId() != null) {
-                dataMap.put("creatorId", moment.getCreatorId());
-            }
-            if (moment.getMedia() != null && moment.getMedia().getUrl() != null) {
-                dataMap.put("mediaUrl", moment.getMedia().getUrl());
-            }
-        } catch (Exception e) {
-            // Fallback: if JSON conversion fails, add basic fields
-            System.err.println("Error converting moment to JSON: " + e.getMessage());
-            if (moment.getMomentId() != null) {
-                dataMap.put("momentId", moment.getMomentId());
-            }
-            if (moment.getEventId() != null) {
-                dataMap.put("eventId", moment.getEventId());
-            }
-        }
-        return dataMap;
-    }
+
     
 }
