@@ -79,7 +79,7 @@ public class MomentDaoImpl implements MomentDao {
     @Override
     public List<Moment> getAllMoments(String eventId) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
-        Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
+        Query query = collection.orderBy("uploadTime", Query.Direction.DESCENDING);
         if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
         }
@@ -388,6 +388,19 @@ public class MomentDaoImpl implements MomentDao {
         }
         
         return totalCount;
+    }
+
+    @Override
+    public void updateMomentFeedUrl(String momentId, String feedUrl) throws ExecutionException, InterruptedException {
+        DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(momentId);
+        DocumentSnapshot document = docRef.get().get();
+
+        if (!document.exists()) {
+            throw new RuntimeException("Moment not found with ID: " + momentId);
+        }
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("media.feedUrl", feedUrl);
+        docRef.update(updates).get();
     }
 
 }

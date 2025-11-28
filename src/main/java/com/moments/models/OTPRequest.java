@@ -5,6 +5,7 @@ import com.google.cloud.Timestamp;
 
 public class OTPRequest {
     private String phoneNumber;
+    private String countryCode;
     private int otp;
     private String otpCode; // String OTP code for verification API
     private long timestamp;
@@ -68,6 +69,14 @@ public class OTPRequest {
 
     public void setOtpCode(String otpCode) {
         this.otpCode = otpCode;
+    }
+
+    public String getCountryCode() {
+        return countryCode;
+    }
+
+    public void setCountryCode(String countryCode) {
+        this.countryCode = countryCode;
     }
 }
 

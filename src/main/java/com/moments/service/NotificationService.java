@@ -12,8 +12,10 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
 import com.google.firebase.messaging.FirebaseMessagingException;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
@@ -48,6 +50,38 @@ public class NotificationService {
     }
 
     /**
+     * Convert data object to Map<String, String> for FCM data field
+     * @param data The data object to convert
+     * @return Map<String, String> representation of the data
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, String> convertToDataMap(Object data) {
+        if (data == null) {
+            return null;
+        }
+        
+        Map<String, String> dataMap = new HashMap<>();
+        
+        if (data instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) data;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = entry.getKey() != null ? entry.getKey().toString() : null;
+                String value = entry.getValue() != null ? entry.getValue().toString() : null;
+                if (key != null) {
+                    dataMap.put(key, value);
+                }
+            }
+        } else {
+            // For other object types, convert to string representation
+            // This is a fallback - ideally data should be a Map
+            System.err.println("Warning: Data is not a Map, converting to string. Consider passing a Map<String, String> instead.");
+            dataMap.put("data", data.toString());
+        }
+        
+        return dataMap;
+    }
+
+    /**
      * Send notification to a user
      * @param userId The user ID to send notification to
      * @param title The notification title
@@ -59,6 +93,10 @@ public class NotificationService {
     }
 
     public boolean sendNotification(String userId, String title, String body, String imageUrl) {
+        return sendNotification(userId, title, body, imageUrl, null);
+    }
+
+    public boolean sendNotification(String userId, String title, String body, String imageUrl, Object data) {
         try {
             UserProfile userProfile = userProfileDao.getUserProfile(userId);
             if (userProfile != null && userProfile.getFcmToken() != null && !userProfile.getFcmToken().isEmpty()) {
@@ -71,10 +109,19 @@ public class NotificationService {
                         notificationBuilder.setImage(imageUrl);
                     }
 
-                    Message message = Message.builder()
+                    Message.Builder messageBuilder = Message.builder()
                             .setToken(userProfile.getFcmToken())
-                            .setNotification(notificationBuilder.build())
-                            .build();
+                            .setNotification(notificationBuilder.build());
+
+                    // Add data field if provided
+                    if (data != null) {
+                        Map<String, String> dataMap = convertToDataMap(data);
+                        if (dataMap != null && !dataMap.isEmpty()) {
+                            messageBuilder.putAllData(dataMap);
+                        }
+                    }
+
+                    Message message = messageBuilder.build();
 
                     String response = firebaseMessaging.send(message);
                     System.out.println("Successfully sent notification to user " + userId + ": " + response);
@@ -146,7 +193,7 @@ public class NotificationService {
      * @param imageUrl Optional image URL to show in the notification
      * @return Number of successful notifications
      */
-    public int sendNotificationToEvent(String eventId, String title, String body, String imageUrl)
+    public int sendNotificationToEvent(String eventId, String title, String body, String imageUrl, Object data)
             throws ExecutionException, InterruptedException {
         if (eventId == null || eventId.trim().isEmpty()) {
             throw new IllegalArgumentException("eventId is required");
@@ -175,7 +222,7 @@ public class NotificationService {
             if (userId == null || userId.trim().isEmpty()) {
                 continue;
             }
-            if (sendNotification(userId, title, body, imageUrl)) {
+            if (sendNotification(userId, title, body, imageUrl, data)) {
                 successCount++;
             }
         }

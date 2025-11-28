@@ -2,6 +2,7 @@ package com.moments.models;
 
 public class Media {
     private String url;
+    private String feedUrl;
     private MediaType type;
     private Integer width;
     private Integer height;
@@ -28,6 +29,14 @@ public class Media {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public String getFeedUrl() {
+        return feedUrl;
+    }
+
+    public void setFeedUrl(String feedUrl) {
+        this.feedUrl = feedUrl;
     }
 
     public MediaType getType() {

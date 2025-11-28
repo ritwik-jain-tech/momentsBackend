@@ -11,6 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import com.moments.models.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,14 +19,6 @@ import org.springframework.stereotype.Service;
 
 import com.moments.dao.LikeDao;
 import com.moments.dao.MomentDao;
-import com.moments.models.Cursor;
-import com.moments.models.Like;
-import com.moments.models.LikeRequest;
-import com.moments.models.Moment;
-import com.moments.models.MomentFilter;
-import com.moments.models.MomentStatus;
-import com.moments.models.MomentsResponse;
-import com.moments.models.ReportRequest;
 
 @Service
 public class MomentService {
@@ -44,6 +37,12 @@ public class MomentService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private UserProfileService userProfileService;
+
+    @Autowired
+    private GoogleCloudStorageService googleCloudStorageService;
+
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
         moment.setUploadTime(Instant.now().toEpochMilli());
@@ -57,10 +56,13 @@ public class MomentService {
 
         String momentId = momentDao.saveMoment(moment);
 
-        logger.info("Successfully saved moment {} to database, triggering face tagging", momentId);
+        logger.info("Successfully saved moment {} to database, triggering face tagging and feed compression", momentId);
 
         // Trigger face tagging service call (async with fail safety) - non-blocking
         faceTaggingService.processMomentsBatchAsync(Collections.singletonList(moment));
+
+        // Trigger feed compression (async) - non-blocking
+        compressAndSetFeedUrlAsync(moment);
 
         return momentId;
     }
@@ -143,11 +145,18 @@ public class MomentService {
         CompletableFuture.runAsync(()->{
             try{
                 String eventId= moments.get(0).getEventId();
-                notificationService.sendNotificationToEvent(eventId,null,"New moments created", null);
+                java.util.Map<String, Object> data = new java.util.HashMap<>();
+                data.put("moment", moments.get(0));
+                notificationService.sendNotificationToEvent(eventId,null,"New moments created", null, data);
             } catch(Exception e){
                 logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);
             }
         });
+
+        // Trigger feed compression for all moments (async) - non-blocking
+        for (Moment moment : validMoments) {
+            compressAndSetFeedUrlAsync(moment);
+        }
 
         return results;
     }
@@ -193,6 +202,11 @@ public class MomentService {
                         logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
                     }
                 });
+
+                // Trigger feed compression for this batch (async) - non-blocking
+                for (Moment moment : batch) {
+                    compressAndSetFeedUrlAsync(moment);
+                }
             } catch (ExecutionException | InterruptedException e) {
                 logger.error("Error saving batch {}: {}", (i / batchSize) + 1, e.getMessage(), e);
                 // Re-throw ExecutionException and InterruptedException as they are declared exceptions
@@ -324,6 +338,16 @@ public class MomentService {
             Like like = new Like(userId, momentId, moment.getEventId(), moment.getCreationTime());
             likeDao.saveLike(like);
             likeDao.updateMomentLikedBy(momentId, userId, true);
+            CompletableFuture.runAsync(()->{
+                try{
+                    UserProfile userProfile = userProfileService.getUser(userId);
+                    java.util.Map<String, Object> data = new java.util.HashMap<>();
+                    data.put("moment", moment);
+                    notificationService.sendNotification(moment.getCreatorId(), null, "♥️" + userProfile.getName() + " added your moment to favourites!", null, data);
+                } catch(Exception e){
+                    logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);
+                }
+            });
             return true; // Return true to indicate liked
         }
     }
@@ -360,6 +384,50 @@ public class MomentService {
                 isLastPage);
 
         return new MomentsResponse(likedMoments, cursorOut);
+    }
+
+    /**
+     * Asynchronously compresses image and sets feedUrl for a moment
+     * This is done async to keep moment creation response time low
+     */
+    private void compressAndSetFeedUrlAsync(Moment moment) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                // Small delay to ensure database transaction is committed
+                Thread.sleep(200);
+                
+                if (moment == null || moment.getMedia() == null || 
+                    moment.getMedia().getUrl() == null || moment.getMedia().getUrl().trim().isEmpty()) {
+                    logger.warn("Cannot compress feed image for moment {} - no media URL", moment != null ? moment.getMomentId() : "null");
+                    return;
+                }
+                
+                // Only process IMAGE type media
+                if (moment.getMedia().getType() != MediaType.IMAGE) {
+                    logger.debug("Skipping feed compression for moment {} - not an image", moment.getMomentId());
+                    return;
+                }
+                
+                String originalUrl = moment.getMedia().getUrl();
+                logger.info("Starting feed compression for moment {}: {}", moment.getMomentId(), originalUrl);
+                
+                // Compress and upload to /compressed/ folder
+                String feedUrl = googleCloudStorageService.compressAndUploadForFeed(originalUrl);
+                
+                // Update moment's media with feedUrl
+                if (moment.getMedia() != null) {
+                    moment.getMedia().setFeedUrl(feedUrl);
+                }
+                momentDao.updateMomentFeedUrl(moment.getMomentId(), feedUrl);
+                
+                logger.info("Successfully compressed and set feedUrl for moment {}: {}", moment.getMomentId(), feedUrl);
+                
+            } catch (Exception e) {
+                logger.error("Error compressing feed image for moment {}: {}", 
+                    moment != null ? moment.getMomentId() : "null", e.getMessage(), e);
+                // Don't throw - this is async and shouldn't affect moment creation
+            }
+        });
     }
 
 }

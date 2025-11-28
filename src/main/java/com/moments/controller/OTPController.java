@@ -28,7 +28,10 @@ public class OTPController {
     @PostMapping("/send")
     public ResponseEntity<BaseResponse> sendOtp(@RequestBody OTPRequest otpRequest) {
         try {
-            otpService.sendOtp(otpRequest.getPhoneNumber());
+            if(otpRequest.getCountryCode()!=null){
+                System.out.println("Counrty Code found:"+ otpRequest.getCountryCode());
+            }
+            otpService.sendOtp(otpRequest.getPhoneNumber(), otpRequest.getCountryCode());
             return ResponseEntity.ok(new BaseResponse("OTP sent successfully", HttpStatus.OK, null));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

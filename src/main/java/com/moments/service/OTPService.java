@@ -22,9 +22,8 @@ public class OTPService {
     @Autowired
     private MessageCentralService messageCentralService;
 
-    public void sendOtp(String phoneNumber) throws Exception {
+    public void sendOtp(String phoneNumber, String countryCode) throws Exception {
         // Extract country code and mobile number if phone number includes country code
-        String countryCode = "91";
         String mobileNumber = phoneNumber;
         
         // If phone number starts with country code (e.g., "919876543210"), extract it
