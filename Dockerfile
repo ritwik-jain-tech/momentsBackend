@@ -28,11 +28,8 @@ EXPOSE 8080
 
 ENV PORT 8080
 
-# Run the application with JVM memory settings
-# Set heap size to 2GB (adjust based on your container resources)
-# -Xmx2g: Maximum heap size
-# -Xms1g: Initial heap size  
-# -XX:+UseG1GC: Use G1 garbage collector for better memory management
-# -XX:MaxGCPauseMillis=200: Target max GC pause time
-# Spring Boot will automatically use the PORT environment variable
-ENTRYPOINT ["java", "-Xmx2g", "-Xms1g", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200", "-jar", "app.jar"]
+# Run the jar file with the dynamically defined port
+CMD ["java", "-jar", "app.jar", "--server.port=${PORT}"]
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
