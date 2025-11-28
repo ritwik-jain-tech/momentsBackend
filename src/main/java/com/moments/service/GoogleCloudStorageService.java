@@ -97,53 +97,129 @@ public class GoogleCloudStorageService {
     /**
      * Converts an image to JPEG format with specified quality compression
      * Uses progressive JPEG and optimization techniques
+     * Memory-optimized: uses Thumbnailator to scale and convert in one step, minimizing memory usage
      * @param file The image file to convert
      * @param quality Quality level (0.0 to 1.0, where 1.0 is highest quality)
      * @return Compressed JPEG bytes
      */
     private byte[] convertToCompressedJPEG(MultipartFile file, float quality) throws IOException {
-        // Read the original image
-        BufferedImage originalImage = ImageIO.read(file.getInputStream());
-        if (originalImage == null) {
-            throw new IOException("Could not read image from file");
-        }
-        
-        long originalSize = file.getSize();
         ByteArrayOutputStream compressedStream = new ByteArrayOutputStream();
+        BufferedImage originalImage = null;
+        BufferedImage processedImage = null;
         
         try {
-            // Use Thumbnailator to optimize the image
-            // Scale down if too large, but maintain aspect ratio
             int maxDimension = 4096; // Maximum dimension to prevent extremely large files
+            
+            // Read image with subsampling if very large to reduce memory usage
+            BufferedImage tempImage = null;
+            try (ImageInputStream iis = ImageIO.createImageInputStream(file.getInputStream())) {
+                Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+                if (readers.hasNext()) {
+                    ImageReader reader = readers.next();
+                    try {
+                        reader.setInput(iis, true, true);
+                        int width = reader.getWidth(0);
+                        int height = reader.getHeight(0);
+                        
+                        // If image is very large, use subsampling during read to reduce memory
+                        if (width > maxDimension || height > maxDimension) {
+                            double scale = Math.min((double) maxDimension / width, (double) maxDimension / height);
+                            int subsampleX = Math.max(1, (int) Math.ceil(1.0 / scale));
+                            int subsampleY = subsampleX;
+                            
+                            ImageReadParam param = reader.getDefaultReadParam();
+                            param.setSourceSubsampling(subsampleX, subsampleY, 0, 0);
+                            tempImage = reader.read(0, param);
+                        } else {
+                            tempImage = reader.read(0);
+                        }
+                    } finally {
+                        reader.dispose();
+                    }
+                }
+            }
+            
+            // If ImageReader approach failed, fall back to direct read
+            if (tempImage == null) {
+                // Read file bytes once and create input stream from it
+                byte[] fileBytes = file.getBytes();
+                tempImage = ImageIO.read(new ByteArrayInputStream(fileBytes));
+                fileBytes = null; // Help GC
+            }
+            
+            if (tempImage == null) {
+                throw new IOException("Could not read image from file");
+            }
+            
+            originalImage = tempImage;
             int width = originalImage.getWidth();
             int height = originalImage.getHeight();
             
-            BufferedImage processedImage = originalImage;
-            
-            // Scale down if necessary (this can reduce file size significantly)
+            // Scale down if still too large (using Thumbnailator for efficient scaling)
             if (width > maxDimension || height > maxDimension) {
                 double scale = Math.min((double) maxDimension / width, (double) maxDimension / height);
                 processedImage = Thumbnails.of(originalImage)
                     .scale(scale)
                     .asBufferedImage();
-            }
-            
-            // Convert to RGB (JPEG doesn't support transparency, so remove alpha channel)
-            BufferedImage rgbImage;
-            if (processedImage.getType() != BufferedImage.TYPE_INT_RGB) {
-                rgbImage = new BufferedImage(processedImage.getWidth(), processedImage.getHeight(), 
-                                             BufferedImage.TYPE_INT_RGB);
-                rgbImage.getGraphics().drawImage(processedImage, 0, 0, null);
+                // Free the original image reference
+                originalImage = null;
             } else {
-                rgbImage = processedImage;
+                processedImage = originalImage;
+                originalImage = null;
             }
             
-            // Use the specified quality level for compression
-            writeJPEGWithQuality(rgbImage, compressedStream, quality, true);
+            // Convert to RGB and compress in one step using Thumbnailator
+            // This is more memory-efficient than creating separate BufferedImages
+            Thumbnails.of(processedImage)
+                .scale(1.0) // No additional scaling
+                .outputFormat("jpg")
+                .outputQuality(quality)
+                .toOutputStream(compressedStream);
+            
+            // Free processed image reference
+            processedImage = null;
             
         } catch (Exception e) {
-            // Fallback: use specified quality if optimization fails
-            writeJPEGWithQuality(originalImage, compressedStream, quality, false);
+            // Fallback: try direct ImageIO write with quality
+            BufferedImage fallbackImage = null;
+            try {
+                // Read file bytes for fallback
+                byte[] fileBytes = file.getBytes();
+                fallbackImage = ImageIO.read(new ByteArrayInputStream(fileBytes));
+                fileBytes = null; // Help GC
+                
+                if (fallbackImage != null) {
+                    // Convert to RGB if needed
+                    BufferedImage rgbImage = fallbackImage;
+                    if (fallbackImage.getType() != BufferedImage.TYPE_INT_RGB) {
+                        rgbImage = new BufferedImage(
+                            fallbackImage.getWidth(), 
+                            fallbackImage.getHeight(), 
+                            BufferedImage.TYPE_INT_RGB
+                        );
+                        java.awt.Graphics2D g = rgbImage.createGraphics();
+                        try {
+                            g.setComposite(java.awt.AlphaComposite.Src);
+                            g.drawImage(fallbackImage, 0, 0, null);
+                        } finally {
+                            g.dispose();
+                        }
+                        fallbackImage = null; // Free original if different
+                    }
+                    writeJPEGWithQuality(rgbImage, compressedStream, quality, false);
+                    rgbImage = null;
+                } else {
+                    throw new IOException("Failed to read image: " + e.getMessage(), e);
+                }
+            } catch (Exception fallbackException) {
+                throw new IOException("Failed to compress image: " + e.getMessage(), e);
+            } finally {
+                fallbackImage = null;
+            }
+        } finally {
+            // Explicitly nullify references to help GC
+            originalImage = null;
+            processedImage = null;
         }
         
         return compressedStream.toByteArray();
