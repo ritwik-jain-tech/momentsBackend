@@ -18,8 +18,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.moments.models.BaseResponse;
+import com.moments.models.BulkEventRoleRequest;
 import com.moments.models.Event;
+import com.moments.models.EventRole;
 import com.moments.models.UserProfile;
+import com.moments.service.EventRoleService;
 import com.moments.service.EventService;
 
 @RestController
@@ -29,6 +32,9 @@ public class EventController {
     private static final Logger log = LoggerFactory.getLogger(EventController.class);
     @Autowired
     private EventService eventService; // Use the service layer
+    
+    @Autowired
+    private EventRoleService eventRoleService;
 
     // Create or Update an Event
     @PostMapping
@@ -70,7 +76,7 @@ public class EventController {
             @RequestParam(value = "userId", required = false) String userId)
             throws ExecutionException, InterruptedException {
         try {
-            List<UserProfile> userProfiles = eventService.getAllUserProfilesInEvent(id, userId);
+            List<UserProfile> userProfiles = eventService.getAllUserProfilesInEventWithRoles(id, userId);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(new BaseResponse("Success getting Users for Event", HttpStatus.OK, userProfiles));
 
@@ -111,9 +117,9 @@ public class EventController {
 
     @GetMapping("/addUser")
     public ResponseEntity<BaseResponse> addUser(@RequestParam String userId, @RequestParam String eventId,
-            @RequestParam boolean isGroomSide) {
+            @RequestParam boolean isGroomSide, @RequestParam(required = false) String roleName) {
         try {
-            Event event = eventService.addUserToEvent(userId, eventId, isGroomSide);
+            Event event = eventService.addUserToEvent(userId, eventId, isGroomSide, roleName);
             if (event != null) {
                 return ResponseEntity.status(HttpStatus.OK)
                         .body(new BaseResponse("Success adding user", HttpStatus.OK, event));
@@ -125,6 +131,32 @@ public class EventController {
             log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+    
+    @PostMapping("/roles/bulk")
+    public ResponseEntity<BaseResponse> bulkCreateOrUpdateEventRoles(@RequestBody BulkEventRoleRequest request) {
+        try {
+            if (request == null || request.getEventRoles() == null || request.getEventRoles().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Request body cannot be empty", HttpStatus.BAD_REQUEST, null));
+            }
+            
+            List<EventRole> createdOrUpdatedRoles = eventRoleService.bulkCreateOrUpdateEventRoles(request);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Successfully created/updated " + createdOrUpdatedRoles.size() + " event roles", 
+                            HttpStatus.OK, createdOrUpdatedRoles));
+
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Error in bulk create/update event roles: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to create/update event roles: " + e.getMessage(), 
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        } catch (Exception e) {
+            log.error("Unexpected error in bulk create/update event roles: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Unexpected error: " + e.getMessage(), 
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 }

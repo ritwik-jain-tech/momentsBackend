@@ -14,6 +14,7 @@ public class UserProfile {
     private String fcmToken;
     private String side;
     private String selfie;
+    private String eventRoleName;  // Optional: role name for the event (not persisted, used only during addUserToEvent)
 
     public String getSide() {
         return side;
@@ -94,6 +95,14 @@ public class UserProfile {
 
     public void setSelfie(String selfie) {
         this.selfie = selfie;
+    }
+
+    public String getEventRoleName() {
+        return eventRoleName;
+    }
+
+    public void setEventRoleName(String eventRoleName) {
+        this.eventRoleName = eventRoleName;
     }
 
     @Override

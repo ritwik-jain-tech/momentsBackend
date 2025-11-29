@@ -54,7 +54,8 @@ public class UserProfileController {
                 if (userProfile.getRole() == null) {
                     userProfile.setRole(Role.USER);
                 }
-                userProfileService.addUserToEvent(userId, userProfile.getEventIds().get(0), isGroomSide);
+                // Pass optional eventRoleName to addUserToEvent
+                userProfileService.addUserToEvent(userId, userProfile.getEventIds().get(0), isGroomSide, userProfile.getEventRoleName());
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .body(new BaseResponse("Success", HttpStatus.CREATED, userProfile));
             } else {
@@ -63,8 +64,9 @@ public class UserProfileController {
                     return ResponseEntity.status(HttpStatus.CONFLICT)
                             .body(new BaseResponse("Success", HttpStatus.CONFLICT, userProfileExisting));
                 } else {
+                    // Pass optional eventRoleName to addUserToEvent
                     userProfileService.addUserToEvent(userProfileExisting.getUserId(), userProfile.getEventIds().get(0),
-                            isGroomSide);
+                            isGroomSide, userProfile.getEventRoleName());
                     return ResponseEntity.status(HttpStatus.CREATED)
                             .body(new BaseResponse("Success", HttpStatus.CREATED, userProfile));
                 }

@@ -15,18 +15,31 @@ public interface MomentDao {
     List<Moment> getAllMoments() throws ExecutionException, InterruptedException;
 
     List<Moment> getAllMoments(String eventId) throws ExecutionException, InterruptedException;
+    
+    List<Moment> getAllMoments(String eventId, String creatorRoleFilter) throws ExecutionException, InterruptedException;
 
     void deleteMoment(String id) throws ExecutionException, InterruptedException;
 
     List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit)
             throws ExecutionException, InterruptedException;
+    
+    List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit, String creatorRoleFilter)
+            throws ExecutionException, InterruptedException;
 
     List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit)
             throws ExecutionException, InterruptedException;
+    
+    List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit, String creatorRoleFilter)
+            throws ExecutionException, InterruptedException;
 
     int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException;
+    
+    int getTotalCount(String creatorUserId, String eventId, String creatorRoleFilter) throws ExecutionException, InterruptedException;
 
     int getTotalCountByTaggedUser(String taggedUserId, String eventId)
+            throws ExecutionException, InterruptedException;
+    
+    int getTotalCountByTaggedUser(String taggedUserId, String eventId, String creatorRoleFilter)
             throws ExecutionException, InterruptedException;
 
     boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException;

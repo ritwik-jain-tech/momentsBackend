@@ -39,6 +39,9 @@ public class MomentService {
 
     @Autowired
     private UserProfileService userProfileService;
+    
+    @Autowired
+    private EventRoleService eventRoleService;
 
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
@@ -50,6 +53,12 @@ public class MomentService {
         moment.setCreationTimeText(epocToString(moment.getCreationTime()));
         moment.setUploadTimeText(epocToString(moment.getUploadTime()));
         moment.setMomentId(generateMomentId(moment.getCreatorId()));
+        
+        // Fetch and set creatorRole for this event
+        if (moment.getEventId() != null && moment.getCreatorId() != null) {
+            String roleName = eventRoleService.getRoleName(moment.getEventId(), moment.getCreatorId());
+            moment.setCreatorRole(roleName);
+        }
 
         String momentId = momentDao.saveMoment(moment);
 
@@ -83,6 +92,14 @@ public class MomentService {
                 moment.setCreationTimeText(epocToString(moment.getCreationTime()));
                 moment.setUploadTimeText(epocToString(moment.getUploadTime()));
                 moment.setMomentId(generateMomentId(moment.getCreatorId()));
+                
+                // Fetch and set creatorRole for this event
+                if (moment.getEventId() != null && moment.getCreatorId() != null) {
+                    String roleName = eventRoleService.getRoleName(moment.getEventId(), moment.getCreatorId());
+                    moment.setCreatorRole(roleName);
+                } else {
+                    moment.setCreatorRole("Guest");
+                }
 
                 // Validate required fields
                 if (moment.getCreatorId() == null || moment.getCreatorId().trim().isEmpty()) {
@@ -239,6 +256,20 @@ public class MomentService {
         String taggedUserId = filter == null ? null : filter.getTaggedUserId();
         String source = filter == null ? null : filter.getSource();
 
+        // Check user's role for this event and determine if we need to filter by creatorRole
+        String creatorRoleFilter = null;
+        if (userId != null && eventId != null && !"123456".equals(eventId) && !Objects.equals(source, "web")) {
+            try {
+                String userRoleName = eventRoleService.getRoleName(eventId, userId);
+                // If roleName is not "admin" (case-insensitive), filter by creatorRole
+                if (userRoleName != null && !userRoleName.equalsIgnoreCase("admin")) {
+                    creatorRoleFilter = userRoleName;
+                }
+            } catch (Exception e) {
+                logger.warn("Error fetching role for userId: {} and eventId: {}. Error: {}", userId, eventId, e.getMessage());
+            }
+        }
+
         List<Moment> moments;
         int totalCount;
 
@@ -256,7 +287,7 @@ public class MomentService {
             moments = momentDao.getMomentsFeedByCreatorIds(allowedCreatorIds, eventId, offset, limit);
             totalCount = momentDao.getTotalCountByCreatorIds(allowedCreatorIds, eventId);
         } else if (Objects.equals(source, "web")) {
-            moments = momentDao.getAllMoments(eventId);
+            moments = momentDao.getAllMoments(eventId, creatorRoleFilter);
             totalCount = moments.size();
         } else if (taggedUserId != null && !taggedUserId.isEmpty()) {
             // Use tagged user filter (creatorId and taggedUserId are mutually exclusive)
@@ -268,8 +299,8 @@ public class MomentService {
             totalCount = momentDao.getTotalCount(creatorId, eventId);
         } else {
             // Default feed (no filters)
-            moments = momentDao.getMomentsFeed(null, eventId, offset, limit);
-            totalCount = momentDao.getTotalCount(null, eventId);
+            moments = momentDao.getMomentsFeed(null, eventId, offset, limit, creatorRoleFilter);
+            totalCount = momentDao.getTotalCount(null, eventId, creatorRoleFilter);
         }
 
         for (Moment moment : moments) {

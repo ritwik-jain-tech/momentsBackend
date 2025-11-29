@@ -78,10 +78,19 @@ public class MomentDaoImpl implements MomentDao {
 
     @Override
     public List<Moment> getAllMoments(String eventId) throws ExecutionException, InterruptedException {
+        return getAllMoments(eventId, null);
+    }
+    
+    @Override
+    public List<Moment> getAllMoments(String eventId, String creatorRoleFilter) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("uploadTime", Query.Direction.DESCENDING);
         if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
+        }
+        // Apply creatorRole filter if provided
+        if (creatorRoleFilter != null && !creatorRoleFilter.isEmpty()) {
+            query = query.whereEqualTo("creatorRole", creatorRoleFilter);
         }
         // Fetch all documents matching the query
         ApiFuture<QuerySnapshot> future = query.get();
@@ -105,6 +114,12 @@ public class MomentDaoImpl implements MomentDao {
     @Override
     public List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit)
             throws ExecutionException, InterruptedException {
+        return getMomentsFeed(creatorUserId, eventId, offset, limit, null);
+    }
+    
+    @Override
+    public List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit, String creatorRoleFilter)
+            throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
 
@@ -116,6 +131,11 @@ public class MomentDaoImpl implements MomentDao {
         // Apply filter if creatorUserId is provided
         if (creatorUserId != null && !creatorUserId.isEmpty()) {
             query = query.whereEqualTo("creatorId", creatorUserId);
+        }
+        
+        // Apply creatorRole filter if provided
+        if (creatorRoleFilter != null && !creatorRoleFilter.isEmpty()) {
+            query = query.whereEqualTo("creatorRole", creatorRoleFilter);
         }
 
         // Fetch all documents matching the query
@@ -136,12 +156,23 @@ public class MomentDaoImpl implements MomentDao {
     @Override
     public List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit)
             throws ExecutionException, InterruptedException {
+        return getMomentsFeedByTaggedUser(taggedUserId, eventId, offset, limit, null);
+    }
+    
+    @Override
+    public List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit, String creatorRoleFilter)
+            throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
 
         query = query.whereEqualTo("status", "APPROVED");
         if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
+        }
+        
+        // Apply creatorRole filter if provided
+        if (creatorRoleFilter != null && !creatorRoleFilter.isEmpty()) {
+            query = query.whereEqualTo("creatorRole", creatorRoleFilter);
         }
 
         // Fetch all documents matching the query
@@ -172,6 +203,11 @@ public class MomentDaoImpl implements MomentDao {
 
     @Override
     public int getTotalCount(String creatorUserId, String eventId) throws ExecutionException, InterruptedException {
+        return getTotalCount(creatorUserId, eventId, null);
+    }
+    
+    @Override
+    public int getTotalCount(String creatorUserId, String eventId, String creatorRoleFilter) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection;
 
@@ -183,6 +219,12 @@ public class MomentDaoImpl implements MomentDao {
         if (creatorUserId != null && !creatorUserId.isEmpty()) {
             query = query.whereEqualTo("creatorId", creatorUserId);
         }
+        
+        // Apply creatorRole filter if provided
+        if (creatorRoleFilter != null && !creatorRoleFilter.isEmpty()) {
+            query = query.whereEqualTo("creatorRole", creatorRoleFilter);
+        }
+        
         // Count all matching documents
         ApiFuture<QuerySnapshot> future = query.get();
         return future.get().size();
@@ -191,11 +233,22 @@ public class MomentDaoImpl implements MomentDao {
     @Override
     public int getTotalCountByTaggedUser(String taggedUserId, String eventId)
             throws ExecutionException, InterruptedException {
+        return getTotalCountByTaggedUser(taggedUserId, eventId, null);
+    }
+    
+    @Override
+    public int getTotalCountByTaggedUser(String taggedUserId, String eventId, String creatorRoleFilter)
+            throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
         Query query = collection;
 
         if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
+        }
+        
+        // Apply creatorRole filter if provided
+        if (creatorRoleFilter != null && !creatorRoleFilter.isEmpty()) {
+            query = query.whereEqualTo("creatorRole", creatorRoleFilter);
         }
 
         // Fetch all documents matching the query

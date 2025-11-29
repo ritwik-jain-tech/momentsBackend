@@ -5,8 +5,6 @@ import com.moments.dao.UserProfileDao;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @Service
@@ -14,6 +12,9 @@ public class UserProfileService {
 
     private final UserProfileDao userProfileDao;
     private final EventDao eventDao;
+    
+    @Autowired
+    private EventRoleService eventRoleService;
 
     @Autowired
     public UserProfileService(UserProfileDao userProfileDao, EventDao eventDao) {
@@ -36,11 +37,7 @@ public class UserProfileService {
     }
 
     public void deleteUser(String userId) throws ExecutionException, InterruptedException {
-        UserProfile userProfile = userProfileDao.getUserProfile(userId);
-        List<String> eventIds = userProfile.getEventIds();
-        eventDao.deleteUserForEvents(userId, eventIds);
-        userProfileDao.deleteUserProfile(userId);
-
+        userProfileDao.deleteUserProfile(userId);        
     }
 
     public UserProfile getUserProfileByPhoneNumber(String phoneNumber) throws ExecutionException, InterruptedException {
@@ -49,8 +46,14 @@ public class UserProfileService {
     }
 
     public UserProfile addUserToEvent(String userId, String eventId, Boolean isGroomSide) throws ExecutionException, InterruptedException {
+        return addUserToEvent(userId, eventId, isGroomSide, null);
+    }
+    
+    public UserProfile addUserToEvent(String userId, String eventId, Boolean isGroomSide, String roleName) throws ExecutionException, InterruptedException {
        UserProfile userProfile = userProfileDao.addUserToEvent(userId, eventId);
         eventDao.addUserToEvent(eventId, userId, isGroomSide);
+        // Create EventRole for this user and event
+        eventRoleService.createOrUpdateEventRole(eventId, userId, roleName);
         return userProfile;
     }
 
