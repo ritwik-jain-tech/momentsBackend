@@ -33,6 +33,9 @@ public class EventRoleService {
     
     public String getRoleName(String eventId, String userId) throws ExecutionException, InterruptedException {
         EventRole eventRole = getEventRole(eventId, userId);
+        if (eventRole == null) {
+            return "Guest";
+        }
         return eventRole.getRoleName();
     }
     
