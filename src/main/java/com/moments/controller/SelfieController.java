@@ -98,7 +98,7 @@ public class SelfieController {
                     result));
             else
                 return ResponseEntity.badRequest()
-                        .body(new BaseResponse("Face tagging failed!", HttpStatus.BAD_REQUEST, result));
+                        .body(new BaseResponse("No moments for selfie found!", HttpStatus.BAD_REQUEST, result));
 
         } catch (Exception e) {
             logger.error("Error processing selfie: {}", e.getMessage(), e);
