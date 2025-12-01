@@ -21,7 +21,7 @@ public class GoogleCloudStorageService {
 
     public FileUploadResponse uploadFile(MultipartFile file, FileType fileType) throws IOException {
         String originalFilename = file.getOriginalFilename();
-        String blobName =  originalFilename;
+        String blobName =  originalFilename+Math.random() ;
         
         // Upload file as-is without compression
         byte[] fileBytes = file.getBytes();
