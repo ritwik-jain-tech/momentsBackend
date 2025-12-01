@@ -9,12 +9,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.moments.models.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.moments.dao.LikeDao;
@@ -42,6 +48,18 @@ public class MomentService {
     
     @Autowired
     private EventRoleService eventRoleService;
+    
+    @Autowired
+    @Qualifier("taskExecutor")
+    private Executor taskExecutor;
+    
+    // Scheduled executor for retries
+    private final ScheduledExecutorService retryExecutor = Executors.newScheduledThreadPool(2);
+    
+    // Constants for retry configuration
+    private static final int MAX_RETRY_ATTEMPTS = 5;
+    private static final long INITIAL_RETRY_DELAY_MS = 500;
+    private static final long MAX_RETRY_DELAY_MS = 10000;
 
     // Create or Update a Moment
     public String saveMoment(Moment moment) throws ExecutionException, InterruptedException {
@@ -95,10 +113,16 @@ public class MomentService {
                 
                 // Fetch and set creatorRole for this event
                 if (moment.getEventId() != null && moment.getCreatorId() != null) {
-                    String roleName = eventRoleService.getRoleName(moment.getEventId(), moment.getCreatorId());
+                    // Fetch roleName for the first moment only and reuse for all
+                    String roleName = null;
+                    if (i == 0) {
+                        roleName = eventRoleService.getRoleName(moment.getEventId(), moment.getCreatorId());
+                    }
+                    // Reuse roleName fetched in first iteration for subsequent moments
+                    if (roleName == null && !validMoments.isEmpty()) {
+                        roleName = validMoments.get(0).getCreatorRole();
+                    }
                     moment.setCreatorRole(roleName);
-                } else {
-                    moment.setCreatorRole("Guest");
                 }
 
                 // Validate required fields
@@ -135,23 +159,10 @@ public class MomentService {
 
         logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
 
-        // Trigger face tagging service call (async with fail safety) for all moments in
-        // batch -
-        // non-blocking - with small delay to ensure DB commit
+        // Trigger face tagging service call with robust retry mechanism
         // Create a copy for async processing to avoid any potential issues
         final List<Moment> momentsForAsync = new ArrayList<>(validMoments);
-        CompletableFuture.runAsync(() -> {
-            try {
-                // Small delay to ensure database transaction is fully committed
-                Thread.sleep(200);
-
-                // Single batch call instead of individual calls
-                faceTaggingService.processMomentsBatchAsync(momentsForAsync);
-                logger.info("Triggered batch face tagging for {} moments", momentsForAsync.size());
-            } catch (Exception e) {
-                logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
-            }
-        });
+        triggerFaceTaggingWithRetry(momentsForAsync, 0);
 
         CompletableFuture.runAsync(()->{
             try{
@@ -192,21 +203,10 @@ public class MomentService {
 
                 logger.info("Successfully saved batch of {} moments to database", batchIds.size());
 
-                // Trigger face tagging for this batch after it's saved - with delay to ensure
-                // DB commit
+                // Trigger face tagging for this batch with robust retry mechanism
                 // Create a copy for async processing to avoid any potential issues
                 final List<Moment> batchForAsync = new ArrayList<>(batch);
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        // Small delay to ensure database transaction is fully committed
-                        Thread.sleep(100);
-                        // Single batch call instead of individual calls
-                        faceTaggingService.processMomentsBatchAsync(batchForAsync);
-                        logger.info("Triggered batch face tagging for {} moments", batchForAsync.size());
-                    } catch (Exception e) {
-                        logger.error("Error triggering batch face tagging: {}", e.getMessage(), e);
-                    }
-                });
+                triggerFaceTaggingWithRetry(batchForAsync, 0);
             } catch (ExecutionException | InterruptedException e) {
                 logger.error("Error saving batch {}: {}", (i / batchSize) + 1, e.getMessage(), e);
                 // Re-throw ExecutionException and InterruptedException as they are declared exceptions
@@ -267,6 +267,8 @@ public class MomentService {
                 }
             } catch (Exception e) {
                 logger.warn("Error fetching role for userId: {} and eventId: {}. Error: {}", userId, eventId, e.getMessage());
+                // If we can't fetch the role, default to filtering by "Guest" for safety
+                creatorRoleFilter = "Guest";
             }
         }
 
@@ -291,12 +293,12 @@ public class MomentService {
             totalCount = moments.size();
         } else if (taggedUserId != null && !taggedUserId.isEmpty()) {
             // Use tagged user filter (creatorId and taggedUserId are mutually exclusive)
-            moments = momentDao.getMomentsFeedByTaggedUser(taggedUserId, eventId, offset, limit);
-            totalCount = momentDao.getTotalCountByTaggedUser(taggedUserId, eventId);
+            moments = momentDao.getMomentsFeedByTaggedUser(taggedUserId, eventId, offset, limit, creatorRoleFilter);
+            totalCount = momentDao.getTotalCountByTaggedUser(taggedUserId, eventId, creatorRoleFilter);
         } else if (creatorId != null && !creatorId.isEmpty()) {
             // Use creator filter (default feed with creator filter)
-            moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit);
-            totalCount = momentDao.getTotalCount(creatorId, eventId);
+            moments = momentDao.getMomentsFeed(creatorId, eventId, offset, limit, creatorRoleFilter);
+            totalCount = momentDao.getTotalCount(creatorId, eventId, creatorRoleFilter);
         } else {
             // Default feed (no filters)
             moments = momentDao.getMomentsFeed(null, eventId, offset, limit, creatorRoleFilter);
@@ -397,6 +399,91 @@ public class MomentService {
                 isLastPage);
 
         return new MomentsResponse(likedMoments, cursorOut);
+    }
+    
+    /**
+     * Robust method to trigger face tagging with exponential backoff retry logic
+     * This ensures the face tagging service is always called, even if there are transient failures
+     */
+    private void triggerFaceTaggingWithRetry(List<Moment> moments, int attemptNumber) {
+        if (moments == null || moments.isEmpty()) {
+            logger.warn("Skipping face tagging trigger: moments list is null or empty");
+            return;
+        }
+        
+        // Calculate delay with exponential backoff, but capped at maximum
+        long delayMs = Math.min(INITIAL_RETRY_DELAY_MS * (long) Math.pow(2, attemptNumber), MAX_RETRY_DELAY_MS);
+        
+        // Use the configured task executor for better resource management
+        CompletableFuture.runAsync(() -> {
+            try {
+                // First attempt: wait a bit for DB commit
+                if (attemptNumber == 0) {
+                    Thread.sleep(200);
+                } else {
+                    // Subsequent retries: use exponential backoff
+                    Thread.sleep(delayMs);
+                }
+                
+                logger.info("Attempting to trigger face tagging (attempt {}/{}) for {} moments", 
+                    attemptNumber + 1, MAX_RETRY_ATTEMPTS, moments.size());
+                
+                // Trigger the face tagging service
+                faceTaggingService.processMomentsBatchAsync(moments);
+                
+                logger.info("Successfully triggered batch face tagging for {} moments", moments.size());
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.error("Thread interrupted while triggering face tagging (attempt {}): {}", 
+                    attemptNumber + 1, e.getMessage(), e);
+                
+                // Retry on interrupt if we haven't exceeded max attempts
+                if (attemptNumber < MAX_RETRY_ATTEMPTS - 1) {
+                    scheduleRetry(moments, attemptNumber + 1);
+                } else {
+                    logger.error("Max retry attempts reached for face tagging after interruption. Giving up.");
+                }
+                
+            } catch (Exception e) {
+                logger.error("Error triggering batch face tagging (attempt {}): {}", 
+                    attemptNumber + 1, e.getMessage(), e);
+                
+                // Retry if we haven't exceeded max attempts
+                if (attemptNumber < MAX_RETRY_ATTEMPTS - 1) {
+                    logger.info("Scheduling retry {} for face tagging in {} ms", 
+                        attemptNumber + 2, delayMs);
+                    scheduleRetry(moments, attemptNumber + 1);
+                } else {
+                    logger.error("Max retry attempts ({}) reached for face tagging. Failed to trigger for {} moments. " +
+                        "Error: {}", MAX_RETRY_ATTEMPTS, moments.size(), e.getMessage(), e);
+                }
+            }
+        }, taskExecutor).exceptionally(ex -> {
+            // Handle any uncaught exceptions in the CompletableFuture
+            logger.error("Unexpected exception in face tagging trigger CompletableFuture (attempt {}): {}", 
+                attemptNumber + 1, ex.getMessage(), ex);
+            
+            // Still retry if possible
+            if (attemptNumber < MAX_RETRY_ATTEMPTS - 1) {
+                scheduleRetry(moments, attemptNumber + 1);
+            } else {
+                logger.error("Max retry attempts reached. Cannot retry face tagging trigger.");
+            }
+            return null;
+        });
+    }
+    
+    /**
+     * Schedule a retry attempt with exponential backoff
+     */
+    private void scheduleRetry(List<Moment> moments, int nextAttempt) {
+        long delayMs = Math.min(INITIAL_RETRY_DELAY_MS * (long) Math.pow(2, nextAttempt), MAX_RETRY_DELAY_MS);
+        
+        retryExecutor.schedule(() -> {
+            logger.info("Executing retry attempt {} for face tagging", nextAttempt + 1);
+            triggerFaceTaggingWithRetry(moments, nextAttempt);
+        }, delayMs, TimeUnit.MILLISECONDS);
     }
 
 }
