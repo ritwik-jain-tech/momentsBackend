@@ -456,4 +456,50 @@ public class MomentDaoImpl implements MomentDao {
         docRef.update(updates).get();
     }
 
+    @Override
+    public int updateAllMomentsCreatorRoleForEvent(String eventId, String creatorRole) throws ExecutionException, InterruptedException {
+        if (eventId == null || eventId.trim().isEmpty()) {
+            throw new IllegalArgumentException("EventId cannot be null or empty");
+        }
+        
+        // Get all moments for this event
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.whereEqualTo("eventId", eventId);
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+        
+        if (documents.isEmpty()) {
+            return 0;
+        }
+        
+        // Update all moments in batches (Firestore batch write limit is 500)
+        WriteBatch batch = firestore.batch();
+        int updateCount = 0;
+        int batchCount = 0;
+        int batchSizeLimit = 500;
+        
+        for (QueryDocumentSnapshot document : documents) {
+            DocumentReference docRef = document.getReference();
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("creatorRole", creatorRole);
+            batch.update(docRef, updates);
+            updateCount++;
+            batchCount++;
+            
+            // Commit batch when we reach the limit
+            if (batchCount >= batchSizeLimit) {
+                batch.commit().get();
+                batch = firestore.batch();
+                batchCount = 0;
+            }
+        }
+        
+        // Commit remaining updates
+        if (batchCount > 0) {
+            batch.commit().get();
+        }
+        
+        return updateCount;
+    }
+
 }

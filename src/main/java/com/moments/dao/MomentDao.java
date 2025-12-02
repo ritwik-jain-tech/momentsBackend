@@ -56,4 +56,6 @@ public interface MomentDao {
     int getTotalCountByCreatorIds(List<String> creatorIds, String eventId) throws ExecutionException, InterruptedException;
 
     void updateMomentFeedUrl(String momentId, String feedUrl) throws ExecutionException, InterruptedException;
+    
+    int updateAllMomentsCreatorRoleForEvent(String eventId, String creatorRole) throws ExecutionException, InterruptedException;
 }

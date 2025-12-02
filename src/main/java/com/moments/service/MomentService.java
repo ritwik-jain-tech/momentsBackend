@@ -268,7 +268,6 @@ public class MomentService {
             } catch (Exception e) {
                 logger.warn("Error fetching role for userId: {} and eventId: {}. Error: {}", userId, eventId, e.getMessage());
                 // If we can't fetch the role, default to filtering by "Guest" for safety
-                creatorRoleFilter = "Guest";
             }
         }
 
@@ -399,6 +398,13 @@ public class MomentService {
                 isLastPage);
 
         return new MomentsResponse(likedMoments, cursorOut);
+    }
+    
+    public int updateAllMomentsCreatorRoleForEvent(String eventId, String creatorRole) throws ExecutionException, InterruptedException {
+        if (creatorRole == null || creatorRole.trim().isEmpty()) {
+            creatorRole = "Guest";
+        }
+        return momentDao.updateAllMomentsCreatorRoleForEvent(eventId, creatorRole);
     }
     
     /**

@@ -14,9 +14,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.moments.models.BaseResponse;
@@ -66,6 +68,8 @@ public class MomentController {
             }
 
             List<String> results = momentService.saveMoments(moments);
+
+            
             return ResponseEntity.status(HttpStatus.OK)
                     .body(new BaseResponse(
                             "Successfully created " + results.size() + " moments atomically with IDs: " + results,
@@ -200,6 +204,30 @@ public class MomentController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Failed to get liked moments: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+    
+    @PutMapping("/event/{eventId}/update-creator-role")
+    public ResponseEntity<BaseResponse> updateAllMomentsCreatorRoleForEvent(@PathVariable String eventId,
+            @RequestParam(value = "creatorRole", defaultValue = "Guest") String creatorRole) {
+        try {
+            if (eventId == null || eventId.trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("EventId cannot be null or empty", HttpStatus.BAD_REQUEST, null));
+            }
+            
+            int updatedCount = momentService.updateAllMomentsCreatorRoleForEvent(eventId, creatorRole);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Successfully updated " + updatedCount + " moments with creatorRole: " + creatorRole,
+                            HttpStatus.OK, updatedCount));
+        } catch (ExecutionException | InterruptedException e) {
+            logger.error("Error updating moments creatorRole for event {}: {}", eventId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to update moments creatorRole: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
         }
     }
 
