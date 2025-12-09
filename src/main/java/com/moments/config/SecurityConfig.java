@@ -74,6 +74,7 @@ public class SecurityConfig {
             "https://admin.moments.live"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        // Allow all headers - comprehensive list for CORS
         configuration.setAllowedHeaders(Arrays.asList(
             "Authorization", 
             "Content-Type", 
@@ -81,7 +82,9 @@ public class SecurityConfig {
             "Accept",
             "Origin",
             "Access-Control-Request-Method",
-            "Access-Control-Request-Headers"
+            "Access-Control-Request-Headers",
+            "Cache-Control",
+            "Pragma"
         ));
         configuration.setExposedHeaders(Arrays.asList(
             "Access-Control-Allow-Origin",

@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,7 +23,7 @@ import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/files")
-@CrossOrigin(origins = "https://admin.moments.live", allowCredentials = "true")
+@CrossOrigin(origins = {"https://admin.moments.live"}, allowedHeaders = {"*"}, methods = {RequestMethod.POST, RequestMethod.OPTIONS})
 public class FileUploadController {
 
     @Autowired
