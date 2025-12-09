@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/files")
+@CrossOrigin(origins = "https://admin.moments.live", allowCredentials = true)
 public class FileUploadController {
 
     @Autowired

@@ -68,7 +68,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList("*")); // Allow all origins
+        // Explicitly allow admin.moments.live for POST requests and allow all other origins
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+            "https://admin.moments.live",
+            "*" // Allow all other origins
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList(
             "Authorization", 
