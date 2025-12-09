@@ -67,7 +67,7 @@ public class MomentController {
                         .body(new BaseResponse("No moments provided for bulk save", HttpStatus.BAD_REQUEST, null));
             }
 
-            List<String> results = momentService.saveMoments(moments);
+            List<String> results = momentService.saveMoments(moments, true);
 
             
             return ResponseEntity.status(HttpStatus.OK)

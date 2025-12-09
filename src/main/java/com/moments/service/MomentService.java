@@ -88,7 +88,7 @@ public class MomentService {
         return momentId;
     }
 
-    public List<String> saveMoments(List<Moment> moments) throws ExecutionException, InterruptedException {
+    public List<String> saveMoments(List<Moment> moments, boolean sendNotification) throws ExecutionException, InterruptedException {
         if (moments == null || moments.isEmpty()) {
             logger.warn("Empty or null moments list provided to saveMomentsBatch");
             return new ArrayList<>();
@@ -164,15 +164,17 @@ public class MomentService {
         final List<Moment> momentsForAsync = new ArrayList<>(validMoments);
         triggerFaceTaggingWithRetry(momentsForAsync, 0);
 
-        CompletableFuture.runAsync(()->{
-            try{
-                String eventId= moments.get(0).getEventId();
-                java.util.Map<String, String> data = notificationService.convertMomentToDataMap(moments.get(0));
-                notificationService.sendNotificationToEvent(eventId,null,"New moments created", null, data);
-            } catch(Exception e){
-                logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);
-            }
-        });
+        if(sendNotification) {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    String eventId = moments.get(0).getEventId();
+                    java.util.Map<String, String> data = notificationService.convertMomentToDataMap(moments.get(0));
+                    notificationService.sendNotificationToEvent(eventId, null, "New moments created", null, data);
+                } catch (Exception e) {
+                    logger.error("Error triggering Notiifcation: {}", e.getMessage(), e);
+                }
+            });
+        }
 
         return results;
     }
