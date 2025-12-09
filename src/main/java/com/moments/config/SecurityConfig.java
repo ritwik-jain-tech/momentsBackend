@@ -36,7 +36,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                     .requestMatchers(new AntPathRequestMatcher("/api/otp/**")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/api/event/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/files/upload")).permitAll()
+                    .requestMatchers(new AntPathRequestMatcher("/api/files/**")).permitAll()
                     // Swagger UI v2
                     .requestMatchers(new AntPathRequestMatcher("/v2/api-docs")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/swagger-resources/**")).permitAll()
@@ -68,10 +68,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Explicitly allow admin.moments.live for POST requests and allow all other origins
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-            "https://admin.moments.live",
-            "*" // Allow all other origins
+        // Explicitly allow admin.moments.live
+        // When allowCredentials is true, use specific origins
+        configuration.setAllowedOrigins(Arrays.asList(
+            "https://admin.moments.live"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList(
