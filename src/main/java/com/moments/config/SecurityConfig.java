@@ -68,14 +68,15 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Allow all origins including localhost
+        // Allow all origins including localhost using patterns (works with credentials)
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
         // Allow all headers
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("*"));
-        // Allow credentials for all origins
-        configuration.setAllowCredentials(true);
+        // Disable credentials when allowing all origins (required when using "*")
+        // If credentials are needed, use specific origins instead of "*"
+        configuration.setAllowCredentials(false);
         configuration.setMaxAge(3600L); // 1 hour
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

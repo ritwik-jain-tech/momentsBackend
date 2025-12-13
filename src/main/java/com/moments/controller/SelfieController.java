@@ -23,7 +23,6 @@ import com.moments.service.UserProfileService;
 
 @RestController
 @RequestMapping("/api/selfie")
-@CrossOrigin(origins = "*")
 public class SelfieController {
 
     private static final Logger logger = LoggerFactory.getLogger(SelfieController.class);
