@@ -68,28 +68,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Explicitly allow admin.moments.live
-        // When allowCredentials is true, use specific origins
-        configuration.setAllowedOrigins(Arrays.asList(
-            "https://admin.moments.live"
-        ));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        // Allow all headers - comprehensive list for CORS
-        configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", 
-            "Content-Type", 
-            "X-Requested-With",
-            "Accept",
-            "Origin",
-            "Access-Control-Request-Method",
-            "Access-Control-Request-Headers",
-            "Cache-Control",
-            "Pragma"
-        ));
-        configuration.setExposedHeaders(Arrays.asList(
-            "Access-Control-Allow-Origin",
-            "Access-Control-Allow-Credentials"
-        ));
+        // Allow all origins including localhost
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
+        // Allow all headers
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setExposedHeaders(Arrays.asList("*"));
+        // Allow credentials for all origins
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L); // 1 hour
         
