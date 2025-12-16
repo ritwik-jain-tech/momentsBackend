@@ -68,15 +68,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Allow all origins including localhost using patterns (works with credentials)
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
+        // Explicitly allow production domain and all other origins using patterns
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+            "*",  // Allows all origins including localhost
+            "https://admin.moments.live"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
         // Allow all headers
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("*"));
-        // Disable credentials when allowing all origins (required when using "*")
-        // If credentials are needed, use specific origins instead of "*"
-        configuration.setAllowCredentials(false);
+        // Allow credentials for supported origins
+        configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L); // 1 hour
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
