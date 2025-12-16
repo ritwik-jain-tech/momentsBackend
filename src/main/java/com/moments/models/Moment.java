@@ -34,8 +34,6 @@ public class Moment {
     private boolean isLiked;
 
     private List<String> taggedUserIds = new ArrayList<>();
-    
-    private String creatorRole;  // Role of the creator for this event (e.g., "Guest", "Admin", "Photographer")
 
     // Getters and Setters
     public long getAspectRatio() {
@@ -150,19 +148,16 @@ public class Moment {
         return isLiked;
     }
 
+    // Alias setter for JSON deserialization when field is named "liked"
+    public void setLiked(boolean liked) {
+        this.isLiked = liked;
+    }
+
     public List<String> getTaggedUserIds() {
         return taggedUserIds;
     }
 
     public void setTaggedUserIds(List<String> taggedUserIds) {
         this.taggedUserIds = taggedUserIds;
-    }
-    
-    public String getCreatorRole() {
-        return creatorRole;
-    }
-    
-    public void setCreatorRole(String creatorRole) {
-        this.creatorRole = creatorRole;
     }
 }
