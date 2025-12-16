@@ -23,7 +23,7 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/api/files")
 @CrossOrigin(
-    originPatterns = {"*", "https://admin.moments.live"},
+    originPatterns = {"https://admin.moments.live"},
     allowedHeaders = {"*"},
     methods = {RequestMethod.POST, RequestMethod.OPTIONS, RequestMethod.GET, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE, RequestMethod.HEAD}
 )
