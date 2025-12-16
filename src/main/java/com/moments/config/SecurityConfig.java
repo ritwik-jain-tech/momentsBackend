@@ -68,51 +68,41 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Browser-compatible CORS configuration
-        // Safari and some mobile browsers are stricter, so we need explicit patterns
+        // Explicitly allow production domain and all other origins
         configuration.setAllowedOriginPatterns(Arrays.asList(
             "https://admin.moments.live",
             "http://localhost:*",
             "https://localhost:*",
             "http://127.0.0.1:*",
             "https://127.0.0.1:*",
-            "http://*",
-            "https://*"
+            "*"  // Allow all other origins
         ));
-        
-        // Explicitly list all methods (some browsers need this)
-        configuration.setAllowedMethods(Arrays.asList(
-            "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"
-        ));
-        
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
+        // Allow all headers including those needed for multipart/form-data
         // Explicitly list common headers for better browser compatibility
-        // Using "*" might not work in all browsers, especially Safari
         configuration.setAllowedHeaders(Arrays.asList(
             "*",
-            "Authorization",
+            "Authorization", 
             "Content-Type",
+            "Content-Length",
+            "Content-Disposition",
             "X-Requested-With",
             "Accept",
+            "Accept-Language",
             "Origin",
             "Access-Control-Request-Method",
             "Access-Control-Request-Headers",
             "Cache-Control",
-            "Pragma",
-            "X-Auth-Token",
-            "fcm_token"
+            "Pragma"
         ));
-        
-        // Expose headers that might be needed
         configuration.setExposedHeaders(Arrays.asList(
+            "*",
             "Access-Control-Allow-Origin",
             "Access-Control-Allow-Credentials",
             "Access-Control-Expose-Headers"
         ));
-        
-        // Allow credentials - required for cookies/auth headers
+        // Allow credentials
         configuration.setAllowCredentials(true);
-        
-        // Set max age for preflight cache (Safari likes explicit values)
         configuration.setMaxAge(3600L); // 1 hour
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
