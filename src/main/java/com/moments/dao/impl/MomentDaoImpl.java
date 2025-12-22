@@ -84,7 +84,8 @@ public class MomentDaoImpl implements MomentDao {
     @Override
     public List<Moment> getAllMoments(String eventId, String creatorRoleFilter) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
-        Query query = collection.orderBy("uploadTime", Query.Direction.DESCENDING);
+        Query query = "123457".equals(eventId)?collection.orderBy("creationTime", Query.Direction.ASCENDING):
+        collection.orderBy("creationTime", Query.Direction.DESCENDING) ;
         if (eventId != null && !eventId.isEmpty()) {
             query = query.whereEqualTo("eventId", eventId);
         }
@@ -121,7 +122,8 @@ public class MomentDaoImpl implements MomentDao {
     public List<Moment> getMomentsFeed(String creatorUserId, String eventId, int offset, int limit, String creatorRoleFilter)
             throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
-        Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
+        Query query = "123457".equals(eventId)?collection.orderBy("creationTime", Query.Direction.ASCENDING):
+        collection.orderBy("creationTime", Query.Direction.DESCENDING) ;
 
         query = query.whereEqualTo("status", "APPROVED");
         if (eventId != null && !eventId.isEmpty()) {
@@ -163,7 +165,8 @@ public class MomentDaoImpl implements MomentDao {
     public List<Moment> getMomentsFeedByTaggedUser(String taggedUserId, String eventId, int offset, int limit, String creatorRoleFilter)
             throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);
-        Query query = collection.orderBy("creationTime", Query.Direction.DESCENDING);
+        Query query = "123457".equals(eventId)?collection.orderBy("creationTime", Query.Direction.ASCENDING):
+        collection.orderBy("creationTime", Query.Direction.DESCENDING) ;
 
         query = query.whereEqualTo("status", "APPROVED");
         if (eventId != null && !eventId.isEmpty()) {
