@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -36,14 +37,37 @@ public class EventController {
     @Autowired
     private EventRoleService eventRoleService;
 
-    // Create or Update an Event
+    /** Create a new event (server assigns {@code eventId} when missing). */
     @PostMapping
-    public ResponseEntity<BaseResponse> createOrUpdateEvent(@RequestBody Event event) {
+    public ResponseEntity<BaseResponse> createEvent(@RequestBody Event event) {
         try {
             String time = eventService.saveEvent(event);
             return ResponseEntity.status(HttpStatus.OK)
-                    .body(new BaseResponse("Success updated time: " + time, HttpStatus.OK, event));
+                    .body(new BaseResponse("Event created. " + time, HttpStatus.OK, event));
 
+        } catch (Exception e) {
+            log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Partial update of an existing event by id. */
+    @PutMapping("/{id}")
+    public ResponseEntity<BaseResponse> updateEvent(@PathVariable String id, @RequestBody Event event) {
+        try {
+            event.setEventId(id);
+            Event updated = eventService.updateEvent(id, event);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Event updated", HttpStatus.OK, updated));
+        } catch (RuntimeException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Event not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+            }
+            log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         } catch (Exception e) {
             log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

@@ -3,6 +3,7 @@ package com.moments.service;
 import com.moments.dao.EventDao;
 import com.moments.dao.UserProfileDao;
 import com.moments.models.Event;
+import com.moments.models.GuestAppConfig;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Service
 public class EventService {
@@ -29,8 +32,40 @@ public class EventService {
     @Autowired
     private EventRoleService eventRoleService;
 
+    private void applyEpochMillisToTimes(Event event) {
+        if (event.getStartTimeEpoch() != null) {
+            event.setStartTime(event.getStartTimeEpoch());
+        }
+        if (event.getEndTimeEpoch() != null) {
+            event.setEndTime(event.getEndTimeEpoch());
+        }
+        event.setStartTimeEpoch(null);
+        event.setEndTimeEpoch(null);
+    }
+
+    private void mergeCreatorAndTeamIntoUserIds(Event event) {
+        Set<String> ids = new LinkedHashSet<>();
+        List<String> existing = event.getUserIds();
+        if (existing != null) {
+            ids.addAll(existing);
+        }
+        if (event.getCreatorId() != null && !event.getCreatorId().isEmpty()) {
+            ids.add(event.getCreatorId());
+        }
+        if (event.getTeamMemberIds() != null) {
+            for (String tid : event.getTeamMemberIds()) {
+                if (tid != null && !tid.isEmpty()) {
+                    ids.add(tid);
+                }
+            }
+        }
+        event.setUserIds(new ArrayList<>(ids));
+    }
+
     // Create or Update an Event
     public String saveEvent(Event event) throws ExecutionException, InterruptedException, InvocationTargetException {
+        applyEpochMillisToTimes(event);
+
         // Generate event ID if not provided
         boolean isNewEvent = (event.getEventId() == null || event.getEventId().isEmpty());
         if (isNewEvent) {
@@ -46,13 +81,8 @@ public class EventService {
             // Default to 48 hours from start time
             event.setEndTime(event.getStartTime() + (48 * 60 * 60 * 1000));
         }
-        
-        // Initialize user list if not provided
-        if (event.getUserIds() == null) {
-            List<String> userIDs = new ArrayList<>();
-            userIDs.add(event.getCreatorId());
-            event.setUserIds(userIDs);
-        }
+
+        mergeCreatorAndTeamIntoUserIds(event);
         
         String result = eventDao.saveEvent(event);
         
@@ -68,6 +98,78 @@ public class EventService {
         }
         
         return result;
+    }
+
+    /**
+     * Partial update: non-null fields from {@code patch} are copied onto the stored event.
+     */
+    public Event updateEvent(String eventId, Event patch) throws ExecutionException, InterruptedException {
+        Event existing = eventDao.getEventById(eventId);
+        if (patch == null) {
+            return existing;
+        }
+        applyEpochMillisToTimes(patch);
+
+        if (patch.getEventName() != null) {
+            existing.setEventName(patch.getEventName());
+        }
+        if (patch.getEventThumbnail() != null) {
+            existing.setEventThumbnail(patch.getEventThumbnail());
+        }
+        if (patch.getCreatorId() != null) {
+            existing.setCreatorId(patch.getCreatorId());
+        }
+        if (patch.getProjectType() != null) {
+            existing.setProjectType(patch.getProjectType());
+        }
+        if (patch.getEventDate() != null) {
+            existing.setEventDate(patch.getEventDate());
+        }
+        if (patch.getLocation() != null) {
+            existing.setLocation(patch.getLocation());
+        }
+        if (patch.getExpectedGuests() != null) {
+            existing.setExpectedGuests(patch.getExpectedGuests());
+        }
+        if (patch.getTeamMemberIds() != null) {
+            existing.setTeamMemberIds(patch.getTeamMemberIds());
+        }
+        if (patch.getStartTime() != null) {
+            existing.setStartTime(patch.getStartTime());
+        }
+        if (patch.getEndTime() != null) {
+            existing.setEndTime(patch.getEndTime());
+        }
+        if (patch.getUserIds() != null) {
+            existing.setUserIds(patch.getUserIds());
+        }
+        if (patch.getGroomSide() != null) {
+            existing.setGroomSide(patch.getGroomSide());
+        }
+        if (patch.getBrideSide() != null) {
+            existing.setBrideSide(patch.getBrideSide());
+        }
+        if (patch.getGuestApp() != null) {
+            existing.setGuestApp(mergeGuestApp(existing.getGuestApp(), patch.getGuestApp()));
+        }
+
+        mergeCreatorAndTeamIntoUserIds(existing);
+        eventDao.saveEvent(existing);
+        return existing;
+    }
+
+    private static GuestAppConfig mergeGuestApp(GuestAppConfig current, GuestAppConfig patch) {
+        if (patch == null) {
+            return current;
+        }
+        GuestAppConfig out = current != null ? current : new GuestAppConfig();
+        if (patch.getEnabled() != null) {
+            out.setEnabled(patch.getEnabled());
+        }
+        if (patch.getThumbnailImage() != null) {
+            out.setThumbnailImage(patch.getThumbnailImage());
+        }
+        return out;
     }
 
     // Get an Event by ID

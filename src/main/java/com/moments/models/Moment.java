@@ -1,11 +1,10 @@
 package com.moments.models;
 
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
 public class Moment {
-    private String momentId;  // Firestore document ID
+    private String momentId; // Firestore document ID
 
     private String eventId;
 
@@ -14,6 +13,8 @@ public class Moment {
     private CreatorDetails creatorDetails;
 
     private String creatorId;
+
+    private String creatorRole;
 
     private Media media;
 
@@ -28,7 +29,7 @@ public class Moment {
     private long aspectRatio;
 
     private List<String> reportedBy = new ArrayList<>();
-    
+
     private List<String> likedBy = new ArrayList<>();
 
     private boolean isLiked;
@@ -74,6 +75,14 @@ public class Moment {
 
     public void setCreatorId(String creatorId) {
         this.creatorId = creatorId;
+    }
+
+    public String getCreatorRole() {
+        return creatorRole;
+    }
+
+    public void setCreatorRole(String creatorRole) {
+        this.creatorRole = creatorRole;
     }
 
     public String getEventId() {

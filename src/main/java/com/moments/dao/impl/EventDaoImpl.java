@@ -75,7 +75,7 @@ public class EventDaoImpl implements EventDao {
             Event event = getEventById(eventId);
             List<String> userIds = event.getUserIds()==null?new ArrayList<>():event.getUserIds();
             List<String> groomSide = event.getGroomSide()==null?new ArrayList<>():event.getGroomSide();
-            List<String> brideSide = event.getBrideSide()==null?new ArrayList<>():event.getUserIds();
+            List<String> brideSide = event.getBrideSide()==null?new ArrayList<>():event.getBrideSide();
 
             if (!userIds.contains(userId)) {
                 userIds.add(userId);

@@ -1,9 +1,14 @@
 package com.moments.models;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.cloud.firestore.annotation.Exclude;
+
 import java.util.List;
 
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Event {
 
     private String eventId;
@@ -16,6 +21,28 @@ public class Event {
     private int totalMoments;
     private Long startTime;
     private Long endTime;
+
+    /** ISO calendar date (e.g. from admin "event date" field). */
+    private String eventDate;
+    private String projectType;
+    private String location;
+    private Integer expectedGuests;
+    private List<String> teamMemberIds;
+    private GuestAppConfig guestApp;
+
+    /**
+     * Optional millis from client; applied to {@link #startTime} before persist and not stored in Firestore.
+     */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Exclude
+    private Long startTimeEpoch;
+
+    /**
+     * Optional millis from client; applied to {@link #endTime} before persist and not stored in Firestore.
+     */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Exclude
+    private Long endTimeEpoch;
 
     // Getters and Setters
 
@@ -105,6 +132,70 @@ public class Event {
 
     public void setEndTime(Long endTime) {
         this.endTime = endTime;
+    }
+
+    public String getEventDate() {
+        return eventDate;
+    }
+
+    public void setEventDate(String eventDate) {
+        this.eventDate = eventDate;
+    }
+
+    public String getProjectType() {
+        return projectType;
+    }
+
+    public void setProjectType(String projectType) {
+        this.projectType = projectType;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public Integer getExpectedGuests() {
+        return expectedGuests;
+    }
+
+    public void setExpectedGuests(Integer expectedGuests) {
+        this.expectedGuests = expectedGuests;
+    }
+
+    public List<String> getTeamMemberIds() {
+        return teamMemberIds;
+    }
+
+    public void setTeamMemberIds(List<String> teamMemberIds) {
+        this.teamMemberIds = teamMemberIds;
+    }
+
+    public GuestAppConfig getGuestApp() {
+        return guestApp;
+    }
+
+    public void setGuestApp(GuestAppConfig guestApp) {
+        this.guestApp = guestApp;
+    }
+
+    public Long getStartTimeEpoch() {
+        return startTimeEpoch;
+    }
+
+    public void setStartTimeEpoch(Long startTimeEpoch) {
+        this.startTimeEpoch = startTimeEpoch;
+    }
+
+    public Long getEndTimeEpoch() {
+        return endTimeEpoch;
+    }
+
+    public void setEndTimeEpoch(Long endTimeEpoch) {
+        this.endTimeEpoch = endTimeEpoch;
     }
 
 }
