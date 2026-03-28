@@ -84,6 +84,10 @@ public class GoogleDriveImportService {
     @Autowired
     private MomentService momentService;
 
+    /** Same credentials as Firestore/Firebase (ADC on Cloud Run, classpath SA in local DEV). */
+    @Autowired
+    private GoogleCredentials googleCredentials;
+
     private String normalizedDriveApiKey() {
         if (driveApiKey == null) {
             return "";
@@ -117,7 +121,9 @@ public class GoogleDriveImportService {
         } else if (sa) {
             logger.info("Google Drive import: using service account from google.drive.credentials.path.");
         } else {
-            logger.info("Google Drive import: not configured (no API key and no readable service account path).");
+            logger.info(
+                    "Google Drive import: will use Application Default Credentials for Drive (same identity as Firestore). "
+                            + "Enable Google Drive API and grant this service account access to shared folders.");
         }
     }
 
@@ -128,7 +134,11 @@ public class GoogleDriveImportService {
         if (!normalizedDriveApiKey().isEmpty()) {
             return true;
         }
-        return hasReadableServiceAccountCredentials();
+        if (hasReadableServiceAccountCredentials()) {
+            return true;
+        }
+        // Production Cloud Run: no env file path needed — use the runtime service account (same as other GCP APIs).
+        return googleCredentials != null;
     }
 
     public boolean isDriveLinkAccessible(String folderOrFileUrl) throws IOException {
@@ -137,7 +147,8 @@ public class GoogleDriveImportService {
         }
         if (!isConfigured()) {
             throw new IllegalArgumentException(
-                    "Google Drive import is not configured. Set google.drive.api.key or google.drive.credentials.path.");
+                    "Google Drive import is not configured. Set GOOGLE_DRIVE_API_KEY, GOOGLE_DRIVE_CREDENTIALS_PATH, "
+                            + "or run with a GCP service account (Application Default Credentials).");
         }
 
         DriveAccess access = createDriveAccess();
@@ -185,8 +196,8 @@ public class GoogleDriveImportService {
         GoogleDriveImportResponse response = new GoogleDriveImportResponse();
         if (!isConfigured()) {
             response.getErrors().add(
-                    "Google Drive import is not configured. Set google.drive.api.key (public \"Anyone with the link\" folders/files, Drive API enabled) "
-                            + "or google.drive.credentials.path (service account JSON for private folders).");
+                    "Google Drive import is not configured. Set GOOGLE_DRIVE_API_KEY (public link folders), "
+                            + "GOOGLE_DRIVE_CREDENTIALS_PATH (SA JSON), or deploy with a GCP service account that has Drive API access.");
             return response;
         }
 
@@ -331,10 +342,23 @@ public class GoogleDriveImportService {
         }
 
         String path = normalizedCredentialsPath();
-        if (path.isEmpty() || !Files.isReadable(Paths.get(path))) {
-            throw new IOException("No readable google.drive.credentials.path");
+        if (!path.isEmpty() && Files.isReadable(Paths.get(path))) {
+            return buildDriveWithServiceAccount(transport, path);
         }
-        return buildDriveWithServiceAccount(transport, path);
+        return buildDriveWithApplicationCredentials(transport);
+    }
+
+    private DriveAccess buildDriveWithApplicationCredentials(NetHttpTransport transport) throws IOException {
+        try {
+            GoogleCredentials scoped = googleCredentials.createScoped(Collections.singleton(DriveScopes.DRIVE_READONLY));
+            Drive drive = new Drive.Builder(transport, GsonFactory.getDefaultInstance(),
+                    new HttpCredentialsAdapter(scoped))
+                    .setApplicationName("Moments Backend")
+                    .build();
+            return new DriveAccess(drive, true);
+        } catch (RuntimeException e) {
+            throw new IOException("Failed to build Drive client with application credentials: " + e.getMessage(), e);
+        }
     }
 
     private DriveAccess buildDriveWithServiceAccount(NetHttpTransport transport, String path) throws IOException {

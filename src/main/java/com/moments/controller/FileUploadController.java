@@ -437,7 +437,7 @@ public class FileUploadController {
             if (!googleDriveImportService.isConfigured()) {
                 return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                         .body(new BaseResponse(
-                                "Google Drive import is not configured. Set google.drive.api.key for public links, or google.drive.credentials.path for a service account.",
+                                "Google Drive import is not configured. Set GOOGLE_DRIVE_API_KEY, GOOGLE_DRIVE_CREDENTIALS_PATH, or use the Cloud Run service account with Drive API enabled.",
                                 HttpStatus.SERVICE_UNAVAILABLE, null));
             }
             if (!googleDriveImportService.isDriveLinkAccessible(request.getFolderUrl())) {
