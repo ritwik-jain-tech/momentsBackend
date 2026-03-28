@@ -24,7 +24,8 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    @Value("${auth.enabled:true}")
+    /** Default false so production matches application.properties if the property is missing. */
+    @Value("${auth.enabled:false}")
     private boolean authEnabled;
 
     @Bean
@@ -38,6 +39,12 @@ public class SecurityConfig {
                     .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/api/event/**")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/api/files/**")).permitAll()
+                    // Guest app + admin: these paths are used without JWT today; permit so auth.enabled=true does not brick clients.
+                    .requestMatchers(new AntPathRequestMatcher("/api/userProfile/**")).permitAll()
+                    .requestMatchers(new AntPathRequestMatcher("/api/moments/**")).permitAll()
+                    .requestMatchers(new AntPathRequestMatcher("/api/notifications/**")).permitAll()
+                    .requestMatchers(new AntPathRequestMatcher("/api/selfie/**")).permitAll()
+                    .requestMatchers(new AntPathRequestMatcher("/moments/**")).permitAll()
                     // Swagger UI v2
                     .requestMatchers(new AntPathRequestMatcher("/v2/api-docs")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/swagger-resources/**")).permitAll()
@@ -72,6 +79,7 @@ public class SecurityConfig {
         // Explicitly allow production domain and all other origins
         configuration.setAllowedOriginPatterns(Arrays.asList(
             "https://admin.moments.live",
+            "https://*.github.io",
             "http://localhost:*",
             "https://localhost:*",
             "http://127.0.0.1:*",
