@@ -1,6 +1,7 @@
 package com.moments.config;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.http.HttpTransportOptions;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,9 +20,14 @@ public class CloudStorageConfig {
 
     @Bean
     public Storage getStorage() {
+        HttpTransportOptions http = HttpTransportOptions.newBuilder()
+                .setConnectTimeout(120_000)
+                .setReadTimeout(300_000)
+                .build();
         return StorageOptions.newBuilder()
                 .setCredentials(googleCredentials)
                 .setProjectId(projectId)
+                .setTransportOptions(http)
                 .build()
                 .getService();
     }

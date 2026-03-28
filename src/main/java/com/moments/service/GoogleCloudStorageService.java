@@ -1,5 +1,6 @@
 package com.moments.service;
 
+import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
@@ -15,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -22,6 +24,9 @@ import java.util.Set;
 public class GoogleCloudStorageService {
 
     private static final Logger logger = LoggerFactory.getLogger(GoogleCloudStorageService.class);
+
+    /** Chunk size for GCS resumable uploads (avoids "Error writing request body" on large JPEGs). */
+    private static final int GCS_WRITE_CHUNK_BYTES = 256 * 1024;
 
     @Autowired
     private Storage storage;
@@ -45,20 +50,17 @@ public class GoogleCloudStorageService {
                 contentType = "video/mp4";
             }
         }
-        // Define the blob (object) metadata
         BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
                 .setContentType(contentType).build();
 
-        // Upload the file to the bucket
-        Blob blob = storage.create(blobInfo, fileBytes);
+        Blob blob = uploadWithResumableChannel(blobInfo, fileBytes);
 
-        // Return the CDN URL of the uploaded file with HTTPS
         String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
 
         return new FileUploadResponse(blobName, contentType, publicURL, fileBytes.length);
     }
 
-    public FileUploadResponse uploadBytes(byte[] fileBytes, String originalFilename, FileType fileType, String contentType) {
+    public FileUploadResponse uploadBytes(byte[] fileBytes, String originalFilename, FileType fileType, String contentType) throws IOException {
         String safeName = originalFilename != null ? originalFilename : "image";
         String blobName = safeName.replaceAll("[^a-zA-Z0-9._-]", "_") + Math.random();
         if (contentType == null || contentType.isBlank()) {
@@ -66,9 +68,31 @@ public class GoogleCloudStorageService {
         }
         BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
                 .setContentType(contentType).build();
-        Blob blob = storage.create(blobInfo, fileBytes);
+        Blob blob = uploadWithResumableChannel(blobInfo, fileBytes);
         String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
         return new FileUploadResponse(blobName, contentType, publicURL, fileBytes.length);
+    }
+
+    /**
+     * Uses a {@link WriteChannel} (resumable upload) instead of {@link Storage#create(BlobInfo, byte[])} so large
+     * images from Drive import do not fail with client errors such as "Error writing request body to server".
+     */
+    private Blob uploadWithResumableChannel(BlobInfo blobInfo, byte[] fileBytes) throws IOException {
+        try (WriteChannel writer = storage.writer(blobInfo)) {
+            ByteBuffer buf = ByteBuffer.wrap(fileBytes);
+            while (buf.hasRemaining()) {
+                int slice = Math.min(buf.remaining(), GCS_WRITE_CHUNK_BYTES);
+                int limit = buf.limit();
+                buf.limit(buf.position() + slice);
+                writer.write(buf);
+                buf.limit(limit);
+            }
+        }
+        Blob blob = storage.get(blobInfo.getBlobId());
+        if (blob == null || !blob.exists()) {
+            throw new IOException("GCS object missing after upload: " + blobInfo.getName());
+        }
+        return blob;
     }
 
     /**

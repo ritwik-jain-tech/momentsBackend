@@ -78,7 +78,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         // Explicitly allow production domain and all other origins
         configuration.setAllowedOriginPatterns(Arrays.asList(
-            "https://admin.moments.live",
+            "https://studio.moments.live",
             "https://*.github.io",
             "http://localhost:*",
             "https://localhost:*",

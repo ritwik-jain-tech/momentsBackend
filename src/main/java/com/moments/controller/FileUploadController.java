@@ -27,7 +27,7 @@ import java.util.concurrent.ExecutionException;
 @RequestMapping("/api/files")
 @CrossOrigin(
     originPatterns = {
-            "https://admin.moments.live",
+            "https://studio.moments.live",
             "http://localhost:*",
             "http://127.0.0.1:*",
     },
