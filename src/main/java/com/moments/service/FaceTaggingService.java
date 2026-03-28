@@ -193,21 +193,16 @@ public class FaceTaggingService {
 
 
     /**
-     * Asynchronously process multiple moments in batch for face tagging
-     * This method runs in background and won't block the main moment creation
-     * process
+     * Synchronous batch call to the face service (use during Cloud Run requests so CPU stays allocated).
      */
-    @Async
-    public CompletableFuture<Void> processMomentsBatchAsync(List<Moment> moments) {
-        logger.info("Starting async batch moment processing for {} moments", moments.size());
-
+    public void processMomentsBatchSync(List<Moment> moments) {
+        logger.info("Starting batch moment processing (sync) for {} moments", moments != null ? moments.size() : 0);
         try {
             if (moments == null || moments.isEmpty()) {
                 logger.warn("Empty moments list provided for batch processing");
-                return CompletableFuture.completedFuture(null);
+                return;
             }
 
-            // Prepare batch request
             Map<String, Object> batchRequest = new HashMap<>();
             List<Map<String, Object>> momentsList = new ArrayList<>();
 
@@ -229,7 +224,7 @@ public class FaceTaggingService {
 
             if (momentsList.isEmpty()) {
                 logger.warn("No valid moments found for batch processing");
-                return CompletableFuture.completedFuture(null);
+                return;
             }
 
             batchRequest.put("moments", momentsList);
@@ -257,9 +252,17 @@ public class FaceTaggingService {
 
         } catch (Exception e) {
             logger.error("Error processing moments batch, error: {}", e.getMessage(), e);
-            // Don't throw exception - fail silently to not break the main flow
         }
+    }
 
+    /**
+     * Asynchronously process multiple moments in batch for face tagging
+     * This method runs in background and won't block the main moment creation
+     * process
+     */
+    @Async("taskExecutor")
+    public CompletableFuture<Void> processMomentsBatchAsync(List<Moment> moments) {
+        processMomentsBatchSync(moments);
         return CompletableFuture.completedFuture(null);
     }
 

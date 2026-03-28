@@ -7,6 +7,9 @@ public class GoogleDriveImportRequest {
     private String creatorId;
     private String creatorUserName;
 
+    /** Set by the server when an {@link UploadRecord} is created for this job. */
+    private String uploadRecordId;
+
     public String getFolderUrl() {
         return folderUrl;
     }
@@ -37,5 +40,13 @@ public class GoogleDriveImportRequest {
 
     public void setCreatorUserName(String creatorUserName) {
         this.creatorUserName = creatorUserName;
+    }
+
+    public String getUploadRecordId() {
+        return uploadRecordId;
+    }
+
+    public void setUploadRecordId(String uploadRecordId) {
+        this.uploadRecordId = uploadRecordId;
     }
 }

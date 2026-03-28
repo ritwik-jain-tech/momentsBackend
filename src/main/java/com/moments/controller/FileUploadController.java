@@ -8,10 +8,14 @@ import com.moments.models.Media;
 import com.moments.models.MediaType;
 import com.moments.models.Moment;
 import com.moments.models.MomentMemoryUsage;
+import com.moments.config.DriveImportProperties;
 import com.moments.models.GoogleDriveImportRequest;
+import com.moments.models.GoogleDriveImportResponse;
+import com.moments.models.UploadRecord;
 import com.moments.service.GoogleCloudStorageService;
 import com.moments.service.GoogleDriveImportService;
 import com.moments.service.MomentService;
+import com.moments.service.UploadRecordService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +24,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 @RestController
@@ -47,6 +53,12 @@ public class FileUploadController {
 
     @Autowired
     private GoogleDriveImportService googleDriveImportService;
+
+    @Autowired
+    private DriveImportProperties driveImportProperties;
+
+    @Autowired
+    private UploadRecordService uploadRecordService;
 
     private static final int BATCH_SIZE = 5;
 
@@ -446,17 +458,64 @@ public class FileUploadController {
                                 "This appears to be a private Google Drive link. Please provide a public link (Anyone with the link can view).",
                                 HttpStatus.FORBIDDEN, null));
             }
-            googleDriveImportService.importFolderAsync(request);
-            return ResponseEntity.ok(new BaseResponse(
-                    "Your Drive import has started. Photos will appear in Moments shortly - you can continue with other work.",
-                    HttpStatus.OK,
-                    null));
+            if (request.getCreatorId() == null || request.getCreatorId().isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("creatorId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            if (request.getEventId() == null || request.getEventId().isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("eventId is required", HttpStatus.BAD_REQUEST, null));
+            }
+
+            String uploadRecordId = uploadRecordService.createStartedForDriveImport(
+                    request.getCreatorId().trim(),
+                    request.getEventId().trim(),
+                    request.getCreatorUserName(),
+                    request.getFolderUrl().trim());
+            request.setUploadRecordId(uploadRecordId);
+
+            if (driveImportProperties.isAsyncImport()) {
+                googleDriveImportService.importFolderAsync(request);
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("uploadRecordId", uploadRecordId);
+                return ResponseEntity.ok(new BaseResponse(
+                        "Your Drive import has started. Photos will appear in Moments shortly - you can continue with other work.",
+                        HttpStatus.OK,
+                        data));
+            }
+            GoogleDriveImportResponse result = googleDriveImportService.importFolder(request);
+            String msg = String.format(
+                    "Drive import finished: created %d moment(s), %d failed, %d image file(s) found.",
+                    result.getMomentsCreated(), result.getFailed(), result.getImageFilesFound());
+            HttpStatus st = result.getMomentsCreated() > 0 || result.getErrors().isEmpty()
+                    ? HttpStatus.OK
+                    : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(st).body(new BaseResponse(msg, st, result));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Drive import failed: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Google Drive import jobs for the uploads tab (newest first).
+     */
+    @GetMapping("/upload-records")
+    public ResponseEntity<BaseResponse> listUploadRecords(@RequestParam("userId") String userId) {
+        try {
+            if (userId == null || userId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("userId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            List<UploadRecord> records = uploadRecordService.listForUserNewestFirst(userId.trim());
+            return ResponseEntity.ok(new BaseResponse("OK", HttpStatus.OK, records));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to list upload records: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }

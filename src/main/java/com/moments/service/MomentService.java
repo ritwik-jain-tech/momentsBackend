@@ -102,6 +102,15 @@ public class MomentService {
     }
 
     public List<String> saveMoments(List<Moment> moments, boolean sendNotification) throws ExecutionException, InterruptedException {
+        return saveMoments(moments, sendNotification, false);
+    }
+
+    /**
+     * @param synchronousFaceTagging when true, call the face-tagging service on the current thread after save (needed
+     *            on Cloud Run where post-response {@code @Async} work may not get CPU).
+     */
+    public List<String> saveMoments(List<Moment> moments, boolean sendNotification, boolean synchronousFaceTagging)
+            throws ExecutionException, InterruptedException {
         if (moments == null || moments.isEmpty()) {
             logger.warn("Empty or null moments list provided to saveMomentsBatch");
             return new ArrayList<>();
@@ -163,7 +172,7 @@ public class MomentService {
 
         // If batch size is 50 or more, split into smaller batches
         if (validMoments.size() >= 50) {
-            return saveMomentsInBatches(validMoments);
+            return saveMomentsInBatches(validMoments, synchronousFaceTagging);
         }
 
         // Use batch operation for atomicity
@@ -171,10 +180,7 @@ public class MomentService {
 
         logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
 
-        // Trigger face tagging service call with robust retry mechanism
-        // Create a copy for async processing to avoid any potential issues
-        final List<Moment> momentsForAsync = new ArrayList<>(validMoments);
-        triggerFaceTaggingWithRetry(momentsForAsync, 0);
+        triggerFaceTaggingAfterSave(new ArrayList<>(validMoments), synchronousFaceTagging);
 
         if(sendNotification) {
             CompletableFuture.runAsync(() -> {
@@ -191,8 +197,25 @@ public class MomentService {
         return results;
     }
 
+    private void triggerFaceTaggingAfterSave(List<Moment> moments, boolean synchronous) {
+        if (moments == null || moments.isEmpty()) {
+            return;
+        }
+        if (synchronous) {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            faceTaggingService.processMomentsBatchSync(moments);
+        } else {
+            triggerFaceTaggingWithRetry(moments, 0);
+        }
+    }
+
     // Helper method to split large batches into smaller ones
-    private List<String> saveMomentsInBatches(List<Moment> moments) throws ExecutionException, InterruptedException {
+    private List<String> saveMomentsInBatches(List<Moment> moments, boolean synchronousFaceTagging)
+            throws ExecutionException, InterruptedException {
         List<String> allIds = new ArrayList<>();
         int batchSize = 49; // Keep under 50 limit
 
@@ -223,8 +246,7 @@ public class MomentService {
 
                 // Trigger face tagging for this batch with robust retry mechanism
                 // Create a copy for async processing to avoid any potential issues
-                final List<Moment> batchForAsync = new ArrayList<>(batch);
-                triggerFaceTaggingWithRetry(batchForAsync, 0);
+                triggerFaceTaggingAfterSave(new ArrayList<>(batch), synchronousFaceTagging);
             } catch (ExecutionException | InterruptedException e) {
                 logger.error("Error saving batch {}: {}", (i / batchSize) + 1, e.getMessage(), e);
                 // Re-throw ExecutionException and InterruptedException as they are declared exceptions

@@ -4,10 +4,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GoogleDriveImportResponse {
+    private String uploadRecordId;
+
     private int imageFilesFound;
     private int momentsCreated;
     private int failed;
     private List<String> errors = new ArrayList<>();
+
+    public String getUploadRecordId() {
+        return uploadRecordId;
+    }
+
+    public void setUploadRecordId(String uploadRecordId) {
+        this.uploadRecordId = uploadRecordId;
+    }
 
     public int getImageFilesFound() {
         return imageFilesFound;

@@ -2,8 +2,10 @@ package com.moments.service;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
@@ -18,6 +20,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +33,7 @@ import org.springframework.stereotype.Service;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.googleapis.services.CommonGoogleClientRequestInitializer;
+import com.google.api.client.http.HttpResponse;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.drive.Drive;
@@ -47,6 +52,8 @@ import com.moments.models.MediaType;
 import com.moments.models.Moment;
 import com.moments.models.MomentMemoryUsage;
 
+import com.moments.config.DriveImportProperties;
+
 import jakarta.annotation.PostConstruct;
 
 @Service
@@ -57,6 +64,8 @@ public class GoogleDriveImportService {
     private static final int MAX_FILES = 5000;
     private static final int MAX_FOLDER_DEPTH = 12;
     private static final int PROCESS_BATCH = 25;
+    /** Bytes of file start kept for width/height probe; avoids loading the whole file into heap. */
+    private static final int DRIVE_IMPORT_PREFIX_PROBE_BYTES = 512 * 1024;
 
     private static final Pattern FOLDER_IN_PATH = Pattern.compile("/folders/([a-zA-Z0-9_-]+)");
     private static final Pattern FILE_IN_PATH = Pattern.compile("/file/d/([a-zA-Z0-9_-]+)");
@@ -83,6 +92,12 @@ public class GoogleDriveImportService {
 
     @Autowired
     private MomentService momentService;
+
+    @Autowired
+    private DriveImportProperties driveImportProperties;
+
+    @Autowired
+    private UploadRecordService uploadRecordService;
 
     /** Same credentials as Firestore/Firebase (ADC on Cloud Run, classpath SA in local DEV). */
     @Autowired
@@ -188,31 +203,66 @@ public class GoogleDriveImportService {
         } catch (Exception e) {
             logger.error("Drive import async job failed for event {}: {}",
                     request != null ? request.getEventId() : null, e.getMessage(), e);
+            markUploadRecordFailed(uploadRecordId(request), e.getMessage());
+        }
+    }
+
+    private static String uploadRecordId(GoogleDriveImportRequest request) {
+        if (request == null || request.getUploadRecordId() == null) {
+            return "";
+        }
+        return request.getUploadRecordId().trim();
+    }
+
+    private void markUploadRecordFailed(String recordId, String message) {
+        if (recordId == null || recordId.isBlank()) {
+            return;
+        }
+        try {
+            uploadRecordService.markDriveImportFailed(recordId, message);
+        } catch (Exception e) {
+            logger.warn("Could not mark UploadRecord failed: {}", e.getMessage());
         }
     }
 
     public GoogleDriveImportResponse importFolder(GoogleDriveImportRequest request)
             throws IOException, ExecutionException, InterruptedException {
         GoogleDriveImportResponse response = new GoogleDriveImportResponse();
+        String rid = uploadRecordId(request);
+        if (!rid.isEmpty()) {
+            response.setUploadRecordId(rid);
+        }
+
         if (!isConfigured()) {
-            response.getErrors().add(
-                    "Google Drive import is not configured. Set GOOGLE_DRIVE_API_KEY (public link folders), "
-                            + "GOOGLE_DRIVE_CREDENTIALS_PATH (SA JSON), or deploy with a GCP service account that has Drive API access.");
+            String msg = "Google Drive import is not configured. Set GOOGLE_DRIVE_API_KEY (public link folders), "
+                    + "GOOGLE_DRIVE_CREDENTIALS_PATH (SA JSON), or deploy with a GCP service account that has Drive API access.";
+            response.getErrors().add(msg);
+            markUploadRecordFailed(rid, msg);
             return response;
         }
 
         String creatorId = request.getCreatorId() != null ? request.getCreatorId().trim() : "";
         if (creatorId.isEmpty()) {
             response.getErrors().add("creatorId is required.");
+            markUploadRecordFailed(rid, "creatorId is required.");
             return response;
         }
         String eventId = request.getEventId() != null ? request.getEventId().trim() : "";
         if (eventId.isEmpty()) {
             response.getErrors().add("eventId is required.");
+            markUploadRecordFailed(rid, "eventId is required.");
             return response;
         }
 
-        DriveAccess access = createDriveAccess();
+        DriveAccess access;
+        try {
+            access = createDriveAccess();
+        } catch (IOException e) {
+            response.getErrors().add(e.getMessage());
+            markUploadRecordFailed(rid, e.getMessage());
+            throw e;
+        }
+
         List<File> images = new ArrayList<>();
         String u = request.getFolderUrl() != null ? request.getFolderUrl().trim() : "";
 
@@ -220,22 +270,32 @@ public class GoogleDriveImportService {
             resolveImagesFromPublicOrSharedLink(access, u, images);
         } catch (IOException e) {
             logger.warn("Drive resolve failed: {}", e.getMessage());
-            response.getErrors().add(
-                    e.getMessage()
-                            + " Ensure the link is shared as \"Anyone with the link\" (Viewer) when using an API key.");
+            String em = e.getMessage()
+                    + " Ensure the link is shared as \"Anyone with the link\" (Viewer) when using an API key.";
+            response.getErrors().add(em);
+            markUploadRecordFailed(rid, em);
             return response;
         }
 
         if (images.isEmpty()) {
             response.getErrors().add("No image files found for this link.");
+            markUploadRecordFailed(rid, "No image files found for this link.");
             return response;
         }
 
         response.setImageFilesFound(images.size());
 
         if (images.size() > MAX_FILES) {
-            response.getErrors().add("Found " + images.size() + " images; maximum per import is " + MAX_FILES + ".");
+            String msg = "Found " + images.size() + " images; maximum per import is " + MAX_FILES + ".";
+            response.getErrors().add(msg);
+            markUploadRecordFailed(rid, msg);
             return response;
+        }
+
+        try {
+            uploadRecordService.afterDriveListing(rid, images.size());
+        } catch (Exception e) {
+            logger.warn("UploadRecord afterDriveListing: {}", e.getMessage());
         }
 
         String userName = "Photographer";
@@ -243,36 +303,55 @@ public class GoogleDriveImportService {
         int created = 0;
         int failed = 0;
 
-        for (int start = 0; start < images.size(); start += PROCESS_BATCH) {
-            int end = Math.min(start + PROCESS_BATCH, images.size());
-            List<Moment> batch = new ArrayList<>();
-            for (int i = start; i < end; i++) {
-                File driveFile = images.get(i);
-                try {
-                    Moment moment = downloadAndBuildMoment(access.drive, driveFile, eventId, creatorId, userName,
-                            access.supportsAllDrives);
-                    if (moment != null) {
-                        batch.add(moment);
-                    }
-                } catch (Exception e) {
-                    failed++;
-                    String msg = (driveFile.getName() != null ? driveFile.getName() : driveFile.getId()) + ": "
-                            + e.getMessage();
-                    logger.error("Drive import file failed: {}", msg);
-                    if (response.getErrors().size() < 25) {
-                        response.getErrors().add(msg);
+        try {
+            for (int start = 0; start < images.size(); start += PROCESS_BATCH) {
+                int end = Math.min(start + PROCESS_BATCH, images.size());
+                List<Moment> batch = new ArrayList<>();
+                for (int i = start; i < end; i++) {
+                    File driveFile = images.get(i);
+                    try {
+                        Moment moment = downloadAndBuildMoment(access.drive, driveFile, eventId, creatorId, userName,
+                                access.supportsAllDrives);
+                        if (moment != null) {
+                            batch.add(moment);
+                        }
+                    } catch (Exception e) {
+                        failed++;
+                        String msg = (driveFile.getName() != null ? driveFile.getName() : driveFile.getId()) + ": "
+                                + e.getMessage();
+                        logger.error("Drive import file failed: {}", msg);
+                        if (response.getErrors().size() < 25) {
+                            response.getErrors().add(msg);
+                        }
                     }
                 }
+                if (!batch.isEmpty()) {
+                    List<String> ids = momentService.saveMoments(batch, false,
+                            driveImportProperties.isSynchronousFaceTaggingDuringDriveImport());
+                    created += ids.size();
+                }
+                try {
+                    uploadRecordService.updateDriveImportProgress(rid, created, failed);
+                } catch (Exception e) {
+                    logger.warn("UploadRecord progress: {}", e.getMessage());
+                }
             }
-            if (!batch.isEmpty()) {
-                List<String> ids = momentService.saveMoments(batch, false);
-                created += ids.size();
-            }
-        }
 
-        response.setMomentsCreated(created);
-        response.setFailed(failed);
-        return response;
+            response.setMomentsCreated(created);
+            response.setFailed(failed);
+            try {
+                uploadRecordService.markDriveImportDone(rid, created, failed);
+            } catch (Exception e) {
+                logger.warn("UploadRecord mark done: {}", e.getMessage());
+            }
+            return response;
+        } catch (ExecutionException | InterruptedException e) {
+            markUploadRecordFailed(rid, e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            markUploadRecordFailed(rid, e.getMessage());
+            throw e;
+        }
     }
 
     private void resolveImagesFromPublicOrSharedLink(DriveAccess access, String url, List<File> images)
@@ -477,63 +556,139 @@ public class GoogleDriveImportService {
     private Moment downloadAndBuildMoment(Drive drive, File driveFile, String eventId, String creatorId,
             String userName,
             boolean supportsAllDrives) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
         Drive.Files.Get getReq = drive.files().get(driveFile.getId());
         if (supportsAllDrives) {
             getReq.setSupportsAllDrives(true);
         }
-        getReq.executeMediaAndDownloadTo(out);
-        byte[] bytes = out.toByteArray();
-        if (bytes.length == 0) {
+        HttpResponse mediaResp = getReq.executeMedia();
+        InputStream raw = mediaResp.getContent();
+        if (raw == null) {
+            mediaResp.disconnect();
             return null;
         }
+        try (InputStream in = raw) {
+            PrefixCaptureInputStream capturing = new PrefixCaptureInputStream(in, DRIVE_IMPORT_PREFIX_PROBE_BYTES);
+            String mime = driveFile.getMimeType() != null ? driveFile.getMimeType() : "image/jpeg";
+            String filename = driveFile.getName() != null ? driveFile.getName() : (driveFile.getId() + ".jpg");
 
-        String mime = driveFile.getMimeType() != null ? driveFile.getMimeType() : "image/jpeg";
-        String filename = driveFile.getName() != null ? driveFile.getName() : (driveFile.getId() + ".jpg");
+            FileUploadResponse uploaded = storageService.uploadStream(capturing, filename, FileType.IMAGE, mime);
 
-        FileUploadResponse uploaded = storageService.uploadBytes(bytes, filename, FileType.IMAGE, mime);
+            long sizeBytes = uploaded.getSizeBytes() != null ? uploaded.getSizeBytes() : 0L;
+            if (sizeBytes == 0) {
+                return null;
+            }
 
-        int width = 0;
-        int height = 0;
+            int[] wh = readImageDimensionsFromPrefix(capturing.getPrefixBuffer(), capturing.getPrefixLength());
+            int width = wh[0];
+            int height = wh[1];
+
+            long creationTime = resolveBestCreationTime(driveFile);
+            long aspectRatio = height > 0 ? Math.round((width * 1000.0) / height) : 0;
+
+            CreatorDetails details = new CreatorDetails();
+            details.setUserId(creatorId);
+            details.setUserName(userName);
+            details.setRole(PHOTOGRAPHER_ROLE);
+
+            Media media = new Media();
+            media.setType(MediaType.IMAGE);
+            media.setUrl(uploaded.getPublicUrl());
+            media.setWidth(width);
+            media.setHeight(height);
+
+            Moment moment = new Moment();
+            moment.setCreatorId(creatorId);
+            moment.setEventId(eventId);
+            moment.setCreationTime(creationTime);
+            moment.setCreatorRole(PHOTOGRAPHER_ROLE);
+            moment.setCreatorDetails(details);
+            moment.setMedia(media);
+            moment.setAspectRatio(aspectRatio);
+
+            MomentMemoryUsage usage = new MomentMemoryUsage();
+            usage.setOriginalUploadSizeBytes(sizeBytes);
+            moment.setMemoryUsage(usage);
+
+            return moment;
+        } finally {
+            mediaResp.disconnect();
+        }
+    }
+
+    private static int[] readImageDimensionsFromPrefix(byte[] data, int len) {
+        if (data == null || len <= 0) {
+            return new int[] { 0, 0 };
+        }
         try {
-            BufferedImage buf = ImageIO.read(new ByteArrayInputStream(bytes));
-            if (buf != null) {
-                width = buf.getWidth();
-                height = buf.getHeight();
+            BufferedImage img = ImageIO.read(new ByteArrayInputStream(data, 0, len));
+            if (img != null) {
+                return new int[] { img.getWidth(), img.getHeight() };
             }
         } catch (Exception ignored) {
-            // HEIC / unsupported: keep defaults
+            // try ImageReader below
+        }
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(data, 0, len))) {
+            if (iis == null) {
+                return new int[] { 0, 0 };
+            }
+            Iterator<ImageReader> it = ImageIO.getImageReaders(iis);
+            if (!it.hasNext()) {
+                return new int[] { 0, 0 };
+            }
+            ImageReader reader = it.next();
+            try {
+                reader.setInput(iis, true, true);
+                return new int[] { reader.getWidth(0), reader.getHeight(0) };
+            } catch (Exception ignored) {
+                return new int[] { 0, 0 };
+            } finally {
+                reader.dispose();
+            }
+        } catch (Exception ignored) {
+            return new int[] { 0, 0 };
+        }
+    }
+
+    /**
+     * Passes through the delegate stream while copying the first {@code maxPrefix} bytes into an internal buffer
+     * (for metadata probes) without holding the full object in memory.
+     */
+    private static final class PrefixCaptureInputStream extends FilterInputStream {
+        private final byte[] prefix;
+        private int prefixLen;
+
+        PrefixCaptureInputStream(InputStream in, int maxPrefix) {
+            super(in);
+            this.prefix = new byte[maxPrefix];
         }
 
-        long creationTime = resolveBestCreationTime(driveFile);
+        @Override
+        public int read() throws IOException {
+            int b = super.read();
+            if (b >= 0 && prefixLen < prefix.length) {
+                prefix[prefixLen++] = (byte) b;
+            }
+            return b;
+        }
 
-        long aspectRatio = height > 0 ? Math.round((width * 1000.0) / height) : 0;
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            int n = super.read(b, off, len);
+            if (n > 0 && prefixLen < prefix.length) {
+                int copy = Math.min(n, prefix.length - prefixLen);
+                System.arraycopy(b, off, prefix, prefixLen, copy);
+                prefixLen += copy;
+            }
+            return n;
+        }
 
-        CreatorDetails details = new CreatorDetails();
-        details.setUserId(creatorId);
-        details.setUserName(userName);
-        details.setRole(PHOTOGRAPHER_ROLE);
+        byte[] getPrefixBuffer() {
+            return prefix;
+        }
 
-        Media media = new Media();
-        media.setType(MediaType.IMAGE);
-        media.setUrl(uploaded.getPublicUrl());
-        media.setWidth(width);
-        media.setHeight(height);
-
-        Moment moment = new Moment();
-        moment.setCreatorId(creatorId);
-        moment.setEventId(eventId);
-        moment.setCreationTime(creationTime);
-        moment.setCreatorRole(PHOTOGRAPHER_ROLE);
-        moment.setCreatorDetails(details);
-        moment.setMedia(media);
-        moment.setAspectRatio(aspectRatio);
-
-        MomentMemoryUsage usage = new MomentMemoryUsage();
-        usage.setOriginalUploadSizeBytes((long) bytes.length);
-        moment.setMemoryUsage(usage);
-
-        return moment;
+        int getPrefixLength() {
+            return prefixLen;
+        }
     }
 
     private long resolveBestCreationTime(File driveFile) {

@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.LinkedHashSet;
@@ -74,6 +75,27 @@ public class GoogleCloudStorageService {
     }
 
     /**
+     * Streams bytes to GCS (resumable upload, fixed read buffer) so callers are not limited by heap size.
+     * Used for Google Drive import of large originals.
+     */
+    public FileUploadResponse uploadStream(InputStream in, String originalFilename, FileType fileType, String contentType) throws IOException {
+        String safeName = originalFilename != null ? originalFilename : "image";
+        String blobName = safeName.replaceAll("[^a-zA-Z0-9._-]", "_") + Math.random();
+        if (contentType == null || contentType.isBlank()) {
+            contentType = fileType == FileType.IMAGE ? "image/jpeg" : "video/mp4";
+        }
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
+                .setContentType(contentType).build();
+        long written = streamToResumableChannel(blobInfo, in);
+        Blob blob = storage.get(blobInfo.getBlobId());
+        if (blob == null || !blob.exists()) {
+            throw new IOException("GCS object missing after upload: " + blobInfo.getName());
+        }
+        String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
+        return new FileUploadResponse(blobName, contentType, publicURL, written);
+    }
+
+    /**
      * Uses a {@link WriteChannel} (resumable upload) instead of {@link Storage#create(BlobInfo, byte[])} so large
      * images from Drive import do not fail with client errors such as "Error writing request body to server".
      */
@@ -93,6 +115,23 @@ public class GoogleCloudStorageService {
             throw new IOException("GCS object missing after upload: " + blobInfo.getName());
         }
         return blob;
+    }
+
+    /** @return total bytes written */
+    private long streamToResumableChannel(BlobInfo blobInfo, InputStream in) throws IOException {
+        byte[] chunk = new byte[GCS_WRITE_CHUNK_BYTES];
+        long total = 0;
+        try (WriteChannel writer = storage.writer(blobInfo)) {
+            int n;
+            while ((n = in.read(chunk)) != -1) {
+                total += n;
+                ByteBuffer bb = ByteBuffer.wrap(chunk, 0, n);
+                while (bb.hasRemaining()) {
+                    writer.write(bb);
+                }
+            }
+        }
+        return total;
     }
 
     /**
