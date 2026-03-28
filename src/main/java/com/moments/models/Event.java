@@ -30,6 +30,9 @@ public class Event {
     private List<String> teamMemberIds;
     private GuestAppConfig guestApp;
 
+    /** Cumulative bytes for all moments in this event (maintained on create/delete/face-tagging updates). */
+    private MomentMemoryUsage aggregatedStorage;
+
     /**
      * Optional millis from client; applied to {@link #startTime} before persist and not stored in Firestore.
      */
@@ -110,8 +113,8 @@ public class Event {
         this.userIds = userIds;
     }
 
-    public int getMemberCount(){
-        return this.userIds.size();
+    public int getMemberCount() {
+        return userIds == null ? 0 : userIds.size();
     }
 
     public void setMemberCount(int memberCount){
@@ -180,6 +183,14 @@ public class Event {
 
     public void setGuestApp(GuestAppConfig guestApp) {
         this.guestApp = guestApp;
+    }
+
+    public MomentMemoryUsage getAggregatedStorage() {
+        return aggregatedStorage;
+    }
+
+    public void setAggregatedStorage(MomentMemoryUsage aggregatedStorage) {
+        this.aggregatedStorage = aggregatedStorage;
     }
 
     public Long getStartTimeEpoch() {

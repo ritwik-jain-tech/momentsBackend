@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -23,8 +24,11 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.moments.dao.EventDao;
 import com.moments.dao.LikeDao;
 import com.moments.dao.MomentDao;
+
+import org.springframework.security.access.AccessDeniedException;
 
 @Service
 public class MomentService {
@@ -33,6 +37,9 @@ public class MomentService {
 
     @Autowired
     private MomentDao momentDao;
+
+    @Autowired
+    private EventDao eventDao;
 
     @Autowired
     private LikeDao likeDao;
@@ -48,6 +55,9 @@ public class MomentService {
     
     @Autowired
     private EventRoleService eventRoleService;
+
+    @Autowired
+    private GoogleCloudStorageService googleCloudStorageService;
     
     @Autowired
     @Qualifier("taskExecutor")
@@ -72,8 +82,9 @@ public class MomentService {
         moment.setUploadTimeText(epocToString(moment.getUploadTime()));
         moment.setMomentId(generateMomentId(moment.getCreatorId()));
         
-        // Fetch and set creatorRole for this event
-        if (moment.getEventId() != null && moment.getCreatorId() != null) {
+        // Set creatorRole from event membership unless already specified (e.g. Drive import as Photographer)
+        if ((moment.getCreatorRole() == null || moment.getCreatorRole().isBlank())
+                && moment.getEventId() != null && moment.getCreatorId() != null) {
             String roleName = eventRoleService.getRoleName(moment.getEventId(), moment.getCreatorId());
             moment.setCreatorRole(roleName);
         }
@@ -81,6 +92,8 @@ public class MomentService {
         String momentId = momentDao.saveMoment(moment);
 
         logger.info("Successfully saved moment {} to database, triggering face tagging", momentId);
+
+        adjustEventStorageForMoment(moment, 1);
 
         // Trigger face tagging service call (async with fail safety) - non-blocking
         faceTaggingService.processMomentsBatchAsync(Collections.singletonList(moment));
@@ -111,14 +124,13 @@ public class MomentService {
                 moment.setUploadTimeText(epocToString(moment.getUploadTime()));
                 moment.setMomentId(generateMomentId(moment.getCreatorId()));
                 
-                // Fetch and set creatorRole for this event
-                if (moment.getEventId() != null && moment.getCreatorId() != null) {
-                    // Fetch roleName for the first moment only and reuse for all
+                // Set creatorRole from event unless already set on the moment
+                if ((moment.getCreatorRole() == null || moment.getCreatorRole().isBlank())
+                        && moment.getEventId() != null && moment.getCreatorId() != null) {
                     String roleName = null;
                     if (i == 0) {
                         roleName = eventRoleService.getRoleName(moment.getEventId(), moment.getCreatorId());
                     }
-                    // Reuse roleName fetched in first iteration for subsequent moments
                     if (roleName == null && !validMoments.isEmpty()) {
                         roleName = validMoments.get(0).getCreatorRole();
                     }
@@ -205,6 +217,10 @@ public class MomentService {
 
                 logger.info("Successfully saved batch of {} moments to database", batchIds.size());
 
+                for (Moment m : batch) {
+                    adjustEventStorageForMoment(m, 1);
+                }
+
                 // Trigger face tagging for this batch with robust retry mechanism
                 // Create a copy for async processing to avoid any potential issues
                 final List<Moment> batchForAsync = new ArrayList<>(batch);
@@ -247,7 +263,137 @@ public class MomentService {
 
     // Delete a Moment by ID
     public void deleteMoment(String id) throws ExecutionException, InterruptedException {
+        try {
+            Moment existing = momentDao.getMomentById(id);
+            googleCloudStorageService.deleteMediaObjects(existing.getMedia());
+        } catch (RuntimeException e) {
+            if (e.getMessage() == null || !e.getMessage().contains("not found")) {
+                throw e;
+            }
+            // Document already absent — still delete Firestore row for idempotency
+        }
         momentDao.deleteMoment(id);
+    }
+
+    /**
+     * Returns storage for one event. User must be a member ({@code userIds} contains {@code userId}).
+     * Prefers {@link Event#getAggregatedStorage()}; falls back to summing moments if unset.
+     */
+    public EventStorageSummary getEventStorageSummary(String eventId, String userId)
+            throws ExecutionException, InterruptedException {
+        if (eventId == null || eventId.isBlank()) {
+            throw new IllegalArgumentException("eventId is required");
+        }
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        assertUserMemberOfEvent(eventId, userId);
+        Event event = eventDao.getEventById(eventId);
+        return buildEventStorageSummary(event);
+    }
+
+    /**
+     * All events the user is a member of ({@code event.userIds} contains {@code userId}), with totals
+     * and per-event breakdown. Uses event membership, not only {@link UserProfile#getEventIds()} (those
+     * lists can drift).
+     */
+    public UserStorageOverview getUserStorageOverview(String userId)
+            throws ExecutionException, InterruptedException {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        UserProfile profile = userProfileService.getUser(userId);
+        if (profile == null) {
+            throw new IllegalArgumentException("User not found");
+        }
+        List<String> eventIds = eventDao.findEventIdsWhereUserIsMember(userId);
+        if (eventIds.isEmpty()) {
+            return new UserStorageOverview(0L, 0L, 0L, 0, new ArrayList<>());
+        }
+        List<Event> eventList = eventDao.getEventsByDocumentIds(eventIds);
+        long sumO = 0L;
+        long sumOp = 0L;
+        long sumTh = 0L;
+        int sumMoments = 0;
+        List<EventStorageSummary> rows = new ArrayList<>();
+        for (Event ev : eventList) {
+            EventStorageSummary row = buildEventStorageSummary(ev);
+            rows.add(row);
+            sumO += row.getTotalOriginalSizeBytes();
+            sumOp += row.getTotalOptimisedSizeBytes();
+            sumTh += row.getTotalThumbnailSizeBytes();
+            sumMoments += row.getMomentCount();
+        }
+        return new UserStorageOverview(sumO, sumOp, sumTh, sumMoments, rows);
+    }
+
+    private static long nz(Long v) {
+        return v == null ? 0L : v;
+    }
+
+    private void adjustEventStorageForMoment(Moment moment, int sign) {
+        if (moment == null || moment.getEventId() == null || moment.getEventId().isBlank()) {
+            return;
+        }
+        MomentMemoryUsage u = moment.getMemoryUsage();
+        long o = u == null ? 0L : nz(u.getOriginalUploadSizeBytes());
+        long op = u == null ? 0L : nz(u.getOptimisedSizeBytes());
+        long th = u == null ? 0L : nz(u.getThumbnailSizeBytes());
+        if (o == 0L && op == 0L && th == 0L) {
+            return;
+        }
+        try {
+            eventDao.adjustAggregatedStorage(moment.getEventId(), sign * o, sign * op, sign * th);
+        } catch (Exception e) {
+            logger.warn("adjustAggregatedStorage failed for event {}: {}", moment.getEventId(), e.getMessage());
+        }
+    }
+
+    private void assertUserMemberOfEvent(String eventId, String userId)
+            throws ExecutionException, InterruptedException {
+        Event event = eventDao.getEventById(eventId);
+        List<String> ids = event.getUserIds();
+        if (ids == null || !ids.contains(userId)) {
+            throw new AccessDeniedException("User is not a member of this event");
+        }
+    }
+
+    private boolean hasMeaningfulAggregate(MomentMemoryUsage agg) {
+        if (agg == null) {
+            return false;
+        }
+        return agg.getOriginalUploadSizeBytes() != null
+                || agg.getOptimisedSizeBytes() != null
+                || agg.getThumbnailSizeBytes() != null;
+    }
+
+    private EventStorageSummary buildEventStorageSummary(Event event)
+            throws ExecutionException, InterruptedException {
+        String eventId = event.getEventId();
+        String eventName = event.getEventName();
+        MomentMemoryUsage agg = event.getAggregatedStorage();
+        if (hasMeaningfulAggregate(agg)) {
+            long to = nz(agg.getOriginalUploadSizeBytes());
+            long top = nz(agg.getOptimisedSizeBytes());
+            long tth = nz(agg.getThumbnailSizeBytes());
+            int mc = Math.max(0, event.getTotalMoments());
+            return new EventStorageSummary(eventId, eventName, to, top, tth, mc);
+        }
+        List<Moment> moments = momentDao.getAllMoments(eventId, null);
+        long totalOriginal = 0L;
+        long totalOptimised = 0L;
+        long totalThumbnail = 0L;
+        for (Moment m : moments) {
+            MomentMemoryUsage u = m.getMemoryUsage();
+            if (u == null) {
+                continue;
+            }
+            totalOriginal += nz(u.getOriginalUploadSizeBytes());
+            totalOptimised += nz(u.getOptimisedSizeBytes());
+            totalThumbnail += nz(u.getThumbnailSizeBytes());
+        }
+        return new EventStorageSummary(eventId, eventName, totalOriginal, totalOptimised, totalThumbnail,
+                moments.size());
     }
 
     public MomentsResponse findMoments(String eventId, MomentFilter filter, Cursor cursor, String userId)

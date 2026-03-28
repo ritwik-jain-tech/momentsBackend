@@ -32,9 +32,14 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(String phoneNumber) {
+    /** JWT subject is the app {@code userId} (numeric string) for studio sessions. */
+    public String generateToken(String subject) {
         Map<String, Object> claims = new HashMap<>();
-        return createToken(claims, phoneNumber);
+        return createToken(claims, subject);
+    }
+
+    public String extractSubject(String token) {
+        return extractClaim(token, Claims::getSubject);
     }
 
     private String createToken(Map<String, Object> claims, String subject) {
@@ -56,8 +61,10 @@ public class JwtUtil {
         }
     }
 
+    /** @deprecated Use {@link #extractSubject}; subject is userId, not always a phone number. */
+    @Deprecated
     public String extractPhoneNumber(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractSubject(token);
     }
 
     public Date extractExpiration(String token) {

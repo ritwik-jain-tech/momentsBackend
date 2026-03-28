@@ -2,9 +2,12 @@ package com.moments.service;
 
 import com.moments.dao.EventDao;
 import com.moments.dao.UserProfileDao;
+import com.moments.models.Role;
 import com.moments.models.UserProfile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 
 @Service
@@ -26,10 +29,44 @@ public class UserProfileService {
         return userProfileDao.createUserProfile(userProfile);
     }
 
+    /**
+     * Studio / Firebase onboarding: creates a profile without requiring an event id.
+     */
+    public UserProfile createMinimalStudioUser(UserProfile seed) throws ExecutionException, InterruptedException {
+        if (seed.getEventIds() == null) {
+            seed.setEventIds(new ArrayList<>());
+        }
+        if (seed.getBlockedUserIds() == null) {
+            seed.setBlockedUserIds(new ArrayList<>());
+        }
+        if (seed.getRole() == null) {
+            seed.setRole(Role.PHOTOGRAPHER);
+        }
+        userProfileDao.createUserProfile(seed);
+        return getUser(seed.getUserId());
+    }
+
+    public UserProfile getUserProfileByFirebaseUid(String firebaseUid) {
+        return userProfileDao.findByFirebaseUid(firebaseUid);
+    }
+
+    public UserProfile getUserProfileByEmailId(String emailIdLowercase) {
+        if (emailIdLowercase == null) {
+            return null;
+        }
+        return userProfileDao.findByEmailId(emailIdLowercase.toLowerCase());
+    }
+
     public UserProfile getUser(String userId) throws ExecutionException, InterruptedException {
-       UserProfile userProfile = userProfileDao.getUserProfile(userId);
-       userProfile.setEventDetails(eventDao.getEventsByIds(userProfile.getEventIds()));
-       return userProfile;
+        UserProfile userProfile = userProfileDao.getUserProfile(userId);
+        if (userProfile == null) {
+            return null;
+        }
+        if (userProfile.getEventIds() == null) {
+            userProfile.setEventIds(new ArrayList<>());
+        }
+        userProfile.setEventDetails(eventDao.getEventsByIds(userProfile.getEventIds()));
+        return userProfile;
     }
 
     public void updateUser(UserProfile userProfile) throws ExecutionException, InterruptedException {

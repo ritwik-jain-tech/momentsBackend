@@ -303,7 +303,7 @@ public class MomentDaoImpl implements MomentDao {
         }
         Map<String, Object> updates = new HashMap<>();
         updates.put("status", status);
-        updates.put("updatedAt", FieldValue.serverTimestamp());
+        updates.put("updated_at", FieldValue.serverTimestamp());
         docRef.update(updates).get();
         return momentId;
     }
@@ -456,6 +456,33 @@ public class MomentDaoImpl implements MomentDao {
         }
         Map<String, Object> updates = new HashMap<>();
         updates.put("media.feedUrl", feedUrl);
+        docRef.update(updates).get();
+    }
+
+    @Override
+    public void updateMomentFaceTaggingStorage(String momentId, String feedUrl, String thumbnailUrl,
+            Long optimisedSizeBytes, Long thumbnailSizeBytes) throws ExecutionException, InterruptedException {
+        DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(momentId);
+        DocumentSnapshot document = docRef.get().get();
+        if (!document.exists()) {
+            throw new RuntimeException("Moment not found with ID: " + momentId);
+        }
+        Map<String, Object> updates = new HashMap<>();
+        if (feedUrl != null) {
+            updates.put("media.feedUrl", feedUrl);
+        }
+        if (thumbnailUrl != null) {
+            updates.put("media.thumbnailUrl", thumbnailUrl);
+        }
+        if (optimisedSizeBytes != null) {
+            updates.put("memoryUsage.optimisedSizeBytes", optimisedSizeBytes);
+        }
+        if (thumbnailSizeBytes != null) {
+            updates.put("memoryUsage.thumbnailSizeBytes", thumbnailSizeBytes);
+        }
+        if (updates.isEmpty()) {
+            return;
+        }
         docRef.update(updates).get();
     }
 

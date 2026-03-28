@@ -3,6 +3,9 @@ package com.moments.models;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.google.cloud.Timestamp;
+import com.google.cloud.firestore.annotation.PropertyName;
+
 public class Moment {
     private String momentId; // Firestore document ID
 
@@ -35,6 +38,19 @@ public class Moment {
     private boolean isLiked;
 
     private List<String> taggedUserIds = new ArrayList<>();
+
+    private MomentMemoryUsage memoryUsage;
+
+    /**
+     * Firestore {@code updated_at} (server timestamp). Must not use Java name {@code updatedAt} or the mapper
+     * also binds document key {@code updatedAt}, which may be a numeric (Double) from legacy clients.
+     */
+    @PropertyName("updated_at")
+    private Timestamp serverUpdatedAt;
+
+    /** Legacy camelCase field; often a numeric epoch from older writes — keep as Double to avoid cast errors. */
+    @PropertyName("updatedAt")
+    private Double legacyUpdatedAtNumber;
 
     // Getters and Setters
     public long getAspectRatio() {
@@ -168,5 +184,29 @@ public class Moment {
 
     public void setTaggedUserIds(List<String> taggedUserIds) {
         this.taggedUserIds = taggedUserIds;
+    }
+
+    public MomentMemoryUsage getMemoryUsage() {
+        return memoryUsage;
+    }
+
+    public void setMemoryUsage(MomentMemoryUsage memoryUsage) {
+        this.memoryUsage = memoryUsage;
+    }
+
+    public Timestamp getServerUpdatedAt() {
+        return serverUpdatedAt;
+    }
+
+    public void setServerUpdatedAt(Timestamp serverUpdatedAt) {
+        this.serverUpdatedAt = serverUpdatedAt;
+    }
+
+    public Double getLegacyUpdatedAtNumber() {
+        return legacyUpdatedAtNumber;
+    }
+
+    public void setLegacyUpdatedAtNumber(Double legacyUpdatedAtNumber) {
+        this.legacyUpdatedAtNumber = legacyUpdatedAtNumber;
     }
 }

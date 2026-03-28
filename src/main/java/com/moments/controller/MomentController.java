@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.moments.models.BaseResponse;
+import com.moments.models.EventStorageSummary;
+import com.moments.models.UserStorageOverview;
 import com.moments.models.LikeRequest;
 import com.moments.models.LikedMomentsRequest;
 import com.moments.models.Moment;
@@ -31,6 +33,8 @@ import com.moments.models.ReportRequest;
 import com.moments.models.UpdateMomentStatusRequest;
 import com.moments.service.MomentService;
 import com.moments.service.NotificationService;
+
+import org.springframework.security.access.AccessDeniedException;
 
 @RestController
 @RequestMapping("/api/moments")
@@ -81,6 +85,48 @@ public class MomentController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Unexpected error during atomic bulk save: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Aggregated storage for an event. Caller must be a member ({@code userIds} contains {@code userId}).
+     */
+    @GetMapping("/events/{eventId}/storage")
+    public ResponseEntity<BaseResponse> getEventStorage(@PathVariable String eventId,
+            @RequestParam String userId) {
+        try {
+            EventStorageSummary summary = momentService.getEventStorageSummary(eventId, userId);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Success", HttpStatus.OK, summary));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.FORBIDDEN, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to load event storage: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Total storage and per-event breakdown for every event where the user is in {@code event.userIds}.
+     */
+    @GetMapping("/storage/overview")
+    public ResponseEntity<BaseResponse> getStorageOverview(@RequestParam String userId) {
+        try {
+            UserStorageOverview overview = momentService.getUserStorageOverview(userId);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Success", HttpStatus.OK, overview));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to load storage overview: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }

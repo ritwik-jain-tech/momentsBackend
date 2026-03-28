@@ -3,6 +3,8 @@ package com.moments.models;
 public class Media {
     private String url;
     private String feedUrl;
+    /** CDN URL for the heavily compressed thumbnail (face-tagging pipeline). */
+    private String thumbnailUrl;
     private MediaType type;
     private Integer width;
     private Integer height;
@@ -37,6 +39,14 @@ public class Media {
 
     public void setFeedUrl(String feedUrl) {
         this.feedUrl = feedUrl;
+    }
+
+    public String getThumbnailUrl() {
+        return thumbnailUrl;
+    }
+
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
     }
 
     public MediaType getType() {

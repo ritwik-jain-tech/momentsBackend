@@ -12,7 +12,11 @@ public interface UserProfileDao {
 
     List<UserProfile> getUserProfiles(List<String> userIds) throws ExecutionException, InterruptedException;
 
-    UserProfile findByPhoneNumber(String userId) throws ExecutionException, InterruptedException;
+    UserProfile findByPhoneNumber(String phoneNumber);
+
+    UserProfile findByFirebaseUid(String firebaseUid);
+
+    UserProfile findByEmailId(String emailIdLowercase);
 
     void updateUserProfile(UserProfile userProfile) throws ExecutionException, InterruptedException;
 

@@ -35,6 +35,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                     .requestMatchers(new AntPathRequestMatcher("/api/otp/**")).permitAll()
+                    .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/api/event/**")).permitAll()
                     .requestMatchers(new AntPathRequestMatcher("/api/files/**")).permitAll()
                     // Swagger UI v2

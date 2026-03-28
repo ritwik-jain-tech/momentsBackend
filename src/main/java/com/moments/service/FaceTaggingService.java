@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
@@ -18,9 +19,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.moments.dao.EventDao;
+import com.moments.dao.MomentDao;
 import com.moments.models.FaceTaggingResult;
 import com.moments.models.Moment;
+import com.moments.models.MomentMemoryUsage;
 
 @Service
 public class FaceTaggingService {
@@ -32,6 +37,12 @@ public class FaceTaggingService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private MomentDao momentDao;
+
+    @Autowired
+    private EventDao eventDao;
 
     @Value("${face.tagging.service.url}")
     private String faceTaggingServiceUrl;
@@ -237,6 +248,7 @@ public class FaceTaggingService {
                 if (statusCode >= 200 && statusCode < 300) {
                     logger.info("Batch moment processing successful for {} moments, response: {}",
                             momentsList.size(), responseBody);
+                    applyBatchFaceTaggingStorageUpdates(responseBody);
                 } else {
                     logger.warn("Batch moment processing failed, status: {}, response: {}",
                             statusCode, responseBody);
@@ -249,6 +261,133 @@ public class FaceTaggingService {
         }
 
         return CompletableFuture.completedFuture(null);
+    }
+
+    /**
+     * Persists optimised/thumbnail URLs and byte sizes returned by the face-tagging batch API.
+     * Accepts several JSON shapes, e.g. {@code results}, {@code moments}, or {@code data} arrays
+     * with objects containing {@code moment_id}, {@code feed_url} / {@code optimised_url},
+     * {@code thumbnail_url}, and size fields such as {@code optimised_size_bytes},
+     * {@code thumbnail_size_bytes}.
+     */
+    private void applyBatchFaceTaggingStorageUpdates(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode arr = pickResultsArray(root);
+            if (arr == null || !arr.isArray()) {
+                return;
+            }
+            for (JsonNode item : arr) {
+                if (item == null || !item.isObject()) {
+                    continue;
+                }
+                String momentId = textField(item, "moment_id", "momentId", "id");
+                if (momentId == null || momentId.isBlank()) {
+                    continue;
+                }
+                String feedUrl = textField(item, "feed_url", "feedUrl", "optimised_url", "optimisedUrl",
+                        "optimized_url", "optimizedUrl");
+                String thumbnailUrl = textField(item, "thumbnail_url", "thumbnailUrl");
+                Long optimisedSize = longField(item, "optimised_size_bytes", "optimisedImageSizeBytes",
+                        "optimized_size_bytes", "optimisedSizeBytes", "optimizedSizeBytes");
+                Long thumbnailSize = longField(item, "thumbnail_size_bytes", "thumbnailImageSizeBytes",
+                        "thumbnailSizeBytes");
+                if (feedUrl == null && thumbnailUrl == null && optimisedSize == null && thumbnailSize == null) {
+                    continue;
+                }
+                Moment before = null;
+                try {
+                    before = momentDao.getMomentById(momentId);
+                } catch (Exception ignored) {
+                    // moment missing — skip aggregate update
+                }
+                try {
+                    momentDao.updateMomentFaceTaggingStorage(momentId, feedUrl, thumbnailUrl, optimisedSize,
+                            thumbnailSize);
+                    if (before != null && before.getEventId() != null && !before.getEventId().isBlank()) {
+                        MomentMemoryUsage u = before.getMemoryUsage();
+                        long oldOpt = u == null ? 0L : nz(u.getOptimisedSizeBytes());
+                        long oldTh = u == null ? 0L : nz(u.getThumbnailSizeBytes());
+                        long newOpt = optimisedSize != null ? optimisedSize : oldOpt;
+                        long newTh = thumbnailSize != null ? thumbnailSize : oldTh;
+                        long dOpt = newOpt - oldOpt;
+                        long dTh = newTh - oldTh;
+                        if (dOpt != 0L || dTh != 0L) {
+                            try {
+                                eventDao.adjustAggregatedStorage(before.getEventId(), 0L, dOpt, dTh);
+                            } catch (Exception ex) {
+                                logger.warn("Event aggregate adjust after face-tagging failed: {}", ex.getMessage());
+                            }
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warn("Face-tagging storage update interrupted for {}: {}", momentId, e.getMessage());
+                } catch (ExecutionException e) {
+                    logger.warn("Face-tagging storage update failed for {}: {}", momentId, e.getMessage());
+                } catch (RuntimeException e) {
+                    logger.debug("Face-tagging storage update skipped for {}: {}", momentId, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not parse face-tagging batch response for storage fields: {}", e.getMessage());
+        }
+    }
+
+    private static long nz(Long v) {
+        return v == null ? 0L : v;
+    }
+
+    private static JsonNode pickResultsArray(JsonNode root) {
+        if (root == null) {
+            return null;
+        }
+        for (String key : new String[] { "results", "moments", "data", "processed_moments", "processedMoments" }) {
+            JsonNode n = root.get(key);
+            if (n != null && n.isArray()) {
+                return n;
+            }
+        }
+        if (root.isArray()) {
+            return root;
+        }
+        return null;
+    }
+
+    private static String textField(JsonNode item, String... keys) {
+        for (String k : keys) {
+            JsonNode n = item.get(k);
+            if (n != null && n.isTextual()) {
+                String v = n.asText();
+                if (v != null && !v.isBlank()) {
+                    return v;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Long longField(JsonNode item, String... keys) {
+        for (String k : keys) {
+            if (!item.has(k) || item.get(k).isNull()) {
+                continue;
+            }
+            JsonNode n = item.get(k);
+            if (n.isNumber()) {
+                return n.longValue();
+            }
+            if (n.isTextual()) {
+                try {
+                    return Long.parseLong(n.asText().trim());
+                } catch (NumberFormatException ignored) {
+                    // try next key
+                }
+            }
+        }
+        return null;
     }
 
 }

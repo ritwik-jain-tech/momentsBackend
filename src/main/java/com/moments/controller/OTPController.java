@@ -7,6 +7,7 @@ import com.moments.models.UserProfile;
 import com.moments.service.OTPService;
 import com.moments.service.UserProfileService;
 import com.moments.service.NotificationService;
+import com.moments.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,9 @@ public class OTPController {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @PostMapping("/send")
     public ResponseEntity<BaseResponse> sendOtp(@RequestBody OTPRequest otpRequest) {
@@ -50,9 +54,11 @@ public class OTPController {
             OTPResponse otpResponse = otpService.verifyOtp(otpRequest.getPhoneNumber(), otpCode);
             if (otpResponse.isSuccess()) {
                 UserProfile userProfile = userProfileService.getUserProfileByPhoneNumber(otpRequest.getPhoneNumber());
-                if( userProfile != null) {
+                if (userProfile != null) {
+                    otpResponse.setToken(jwtUtil.generateToken(userProfile.getUserId()));
                     otpResponse.setUserProfile(userProfile);
-                    otpResponse.setUserInEvent(otpRequest.getEventId()!=null && userProfile.getEventIds()!=null && userProfile.getEventIds().contains(otpRequest.getEventId()));
+                    otpResponse.setUserInEvent(otpRequest.getEventId() != null && userProfile.getEventIds() != null
+                            && userProfile.getEventIds().contains(otpRequest.getEventId()));
                     return ResponseEntity.ok(new BaseResponse("OTP verified successfully, User Profile Exists", HttpStatus.OK, otpResponse));
 
                 } else {

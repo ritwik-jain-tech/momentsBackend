@@ -75,6 +75,28 @@ public class EventController {
         }
     }
 
+    /**
+     * Must be registered before {@code /{id}} so the path segment {@code for-user} is not treated as an event id.
+     */
+    @GetMapping("/for-user")
+    public ResponseEntity<BaseResponse> getEventsForUser(@RequestParam("userId") String userId) {
+        try {
+            List<Event> events = eventService.getEventsForMemberUser(userId);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Success getting events for user", HttpStatus.OK, events));
+        } catch (IllegalArgumentException e) {
+            HttpStatus st = e.getMessage() != null && e.getMessage().contains("not found")
+                    ? HttpStatus.NOT_FOUND
+                    : HttpStatus.BAD_REQUEST;
+            return ResponseEntity.status(st)
+                    .body(new BaseResponse(e.getMessage(), st, null));
+        } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
     // Get an Event by ID
     @GetMapping("/{id}")
     public ResponseEntity<BaseResponse> getEventById(@PathVariable String id)
@@ -88,6 +110,14 @@ public class EventController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new BaseResponse("Event not found", HttpStatus.NOT_FOUND, event));
 
+        } catch (RuntimeException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Event not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+            }
+            log.error(e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         } catch (ExecutionException | InterruptedException e) {
             log.error(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

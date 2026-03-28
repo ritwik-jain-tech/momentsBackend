@@ -10,8 +10,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 @Repository
@@ -143,12 +145,99 @@ public class EventDaoImpl implements EventDao {
     }
 
     @Override
+    public List<Event> getEventsByDocumentIds(List<String> documentIds) throws ExecutionException, InterruptedException {
+        List<Event> ordered = new ArrayList<>();
+        if (documentIds == null || documentIds.isEmpty()) {
+            return ordered;
+        }
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Map<String, Event> byDocId = new HashMap<>();
+        final int batchSize = 10;
+        for (int i = 0; i < documentIds.size(); i += batchSize) {
+            int end = Math.min(i + batchSize, documentIds.size());
+            List<String> batch = documentIds.subList(i, end);
+            List<DocumentReference> refs = new ArrayList<>(batch.size());
+            for (String id : batch) {
+                refs.add(collection.document(id));
+            }
+            ApiFuture<List<DocumentSnapshot>> future = firestore.getAll(refs.toArray(new DocumentReference[0]));
+            List<DocumentSnapshot> snaps = future.get();
+            for (DocumentSnapshot snap : snaps) {
+                if (snap.exists()) {
+                    Event event = snap.toObject(Event.class);
+                    if (event != null) {
+                        byDocId.put(snap.getId(), event);
+                    }
+                }
+            }
+        }
+        for (String id : documentIds) {
+            Event e = byDocId.get(id);
+            if (e != null) {
+                ordered.add(e);
+            }
+        }
+        return ordered;
+    }
+
+    @Override
+    public List<String> findEventIdsWhereUserIsMember(String userId) throws ExecutionException, InterruptedException {
+        if (userId == null || userId.isBlank()) {
+            return new ArrayList<>();
+        }
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Set<String> ids = new LinkedHashSet<>();
+        appendEventIdsFromUserIdsQuery(collection.whereArrayContains("userIds", userId).get(), ids);
+        if (userId.chars().allMatch(Character::isDigit)) {
+            try {
+                long asLong = Long.parseLong(userId);
+                appendEventIdsFromUserIdsQuery(collection.whereArrayContains("userIds", asLong).get(), ids);
+            } catch (NumberFormatException ignored) {
+                // not a usable long
+            }
+        }
+        List<String> sorted = new ArrayList<>(ids);
+        sorted.sort(String::compareTo);
+        return sorted;
+    }
+
+    private static void appendEventIdsFromUserIdsQuery(ApiFuture<QuerySnapshot> future, Set<String> out)
+            throws ExecutionException, InterruptedException {
+        for (QueryDocumentSnapshot document : future.get().getDocuments()) {
+            out.add(document.getId());
+        }
+    }
+
+    @Override
     public void deleteUserForEvents(String userId, List<String> eventIds) throws ExecutionException, InterruptedException {
        List<Event> events = getEventsByIds(eventIds);
        for (Event event : events) {
            event.getUserIds().remove(userId);
            saveEvent(event);
        }
+    }
+
+    @Override
+    public void adjustAggregatedStorage(String eventId, long deltaOriginal, long deltaOptimised, long deltaThumbnail)
+            throws ExecutionException, InterruptedException {
+        if (eventId == null || eventId.isBlank()) {
+            return;
+        }
+        if (deltaOriginal == 0L && deltaOptimised == 0L && deltaThumbnail == 0L) {
+            return;
+        }
+        DocumentReference ref = firestore.collection(COLLECTION_NAME).document(eventId);
+        Map<String, Object> updates = new HashMap<>();
+        if (deltaOriginal != 0L) {
+            updates.put("aggregatedStorage.originalUploadSizeBytes", FieldValue.increment(deltaOriginal));
+        }
+        if (deltaOptimised != 0L) {
+            updates.put("aggregatedStorage.optimisedSizeBytes", FieldValue.increment(deltaOptimised));
+        }
+        if (deltaThumbnail != 0L) {
+            updates.put("aggregatedStorage.thumbnailSizeBytes", FieldValue.increment(deltaThumbnail));
+        }
+        ref.update(updates).get();
     }
 
 

@@ -195,6 +195,21 @@ public class EventService {
         return eventDao.getAllEvents();
     }
 
+    /**
+     * Events where {@code userIds} contains {@code userId} (same membership rule as storage overview).
+     */
+    public List<Event> getEventsForMemberUser(String userId) throws ExecutionException, InterruptedException {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        UserProfile profile = userProfileService.getUser(userId);
+        if (profile == null) {
+            throw new IllegalArgumentException("User not found");
+        }
+        List<String> ids = eventDao.findEventIdsWhereUserIsMember(userId);
+        return eventDao.getEventsByDocumentIds(ids);
+    }
+
     // Delete an Event by ID
     public void deleteEvent(String id) throws ExecutionException, InterruptedException {
         eventDao.deleteEvent(id);

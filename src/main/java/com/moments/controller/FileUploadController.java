@@ -7,7 +7,10 @@ import com.moments.models.FileUploadResponse;
 import com.moments.models.Media;
 import com.moments.models.MediaType;
 import com.moments.models.Moment;
+import com.moments.models.MomentMemoryUsage;
+import com.moments.models.GoogleDriveImportRequest;
 import com.moments.service.GoogleCloudStorageService;
+import com.moments.service.GoogleDriveImportService;
 import com.moments.service.MomentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -23,7 +26,11 @@ import java.util.concurrent.ExecutionException;
 @RestController
 @RequestMapping("/api/files")
 @CrossOrigin(
-    originPatterns = {"https://admin.moments.live"},
+    originPatterns = {
+            "https://admin.moments.live",
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+    },
     allowedHeaders = {"*"},
     methods = {RequestMethod.POST, RequestMethod.OPTIONS, RequestMethod.GET, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE, RequestMethod.HEAD}
 )
@@ -37,6 +44,9 @@ public class FileUploadController {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private GoogleDriveImportService googleDriveImportService;
 
     private static final int BATCH_SIZE = 5;
 
@@ -209,7 +219,10 @@ public class FileUploadController {
                         moment.setEventId(eventId);
                         moment.setCreationTime(createdTimestamp);
                         moment.setMedia(media);
-                        
+                        MomentMemoryUsage usage = new MomentMemoryUsage();
+                        usage.setOriginalUploadSizeBytes(file.getSize());
+                        moment.setMemoryUsage(usage);
+
                         momentsToCreate.add(moment);
                     } catch (Exception e) {
                         failedFiles.add(new BulkUploadResponse.FileUploadError(
@@ -351,6 +364,12 @@ public class FileUploadController {
                         
                         // Update the moment's media URL with the uploaded URL
                         moment.getMedia().setUrl(fileUploadResponse.getPublicUrl());
+
+                        MomentMemoryUsage usage = moment.getMemoryUsage() != null
+                                ? moment.getMemoryUsage()
+                                : new MomentMemoryUsage();
+                        usage.setOriginalUploadSizeBytes(file.getSize());
+                        moment.setMemoryUsage(usage);
                         
                         // Ensure media type is set correctly
                         if (moment.getMedia().getType() == null) {
@@ -398,6 +417,46 @@ public class FileUploadController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Internal Server Error: " + e.getMessage(), 
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Import images from a publicly shared Google Drive folder or file link (recursive for folders).
+     * Configure {@code google.drive.api.key} for "Anyone with the link" content, or
+     * {@code google.drive.credentials.path} for private/shared-drive folders.
+     * Moments are created with creatorRole "Photographer".
+     */
+    @PostMapping("/import-google-drive-folder")
+    public ResponseEntity<BaseResponse> importGoogleDriveFolder(@RequestBody GoogleDriveImportRequest request) {
+        try {
+            if (request == null || request.getFolderUrl() == null || request.getFolderUrl().isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("folderUrl is required", HttpStatus.BAD_REQUEST, null));
+            }
+            if (!googleDriveImportService.isConfigured()) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(new BaseResponse(
+                                "Google Drive import is not configured. Set google.drive.api.key for public links, or google.drive.credentials.path for a service account.",
+                                HttpStatus.SERVICE_UNAVAILABLE, null));
+            }
+            if (!googleDriveImportService.isDriveLinkAccessible(request.getFolderUrl())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new BaseResponse(
+                                "This appears to be a private Google Drive link. Please provide a public link (Anyone with the link can view).",
+                                HttpStatus.FORBIDDEN, null));
+            }
+            googleDriveImportService.importFolderAsync(request);
+            return ResponseEntity.ok(new BaseResponse(
+                    "Your Drive import has started. Photos will appear in Moments shortly - you can continue with other work.",
+                    HttpStatus.OK,
+                    null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Drive import failed: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }

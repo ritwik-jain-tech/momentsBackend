@@ -37,22 +37,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         final String authorizationHeader = request.getHeader("Authorization");
 
-        String phoneNumber = null;
+        String subject = null;
         String jwt = null;
 
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             jwt = authorizationHeader.substring(7);
             try {
-                phoneNumber = jwtUtil.extractPhoneNumber(jwt);
+                subject = jwtUtil.extractSubject(jwt);
             } catch (Exception e) {
                 logger.error("JWT Token is invalid: {}", e.getMessage());
             }
         }
 
-        if (phoneNumber != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        if (subject != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             if (jwtUtil.validateToken(jwt)) {
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        phoneNumber, null, Collections.emptyList());
+                        subject, null, Collections.emptyList());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }

@@ -56,6 +56,13 @@ public interface MomentDao {
     int getTotalCountByCreatorIds(List<String> creatorIds, String eventId) throws ExecutionException, InterruptedException;
 
     void updateMomentFeedUrl(String momentId, String feedUrl) throws ExecutionException, InterruptedException;
+
+    /**
+     * Partial update after face-tagging: optimised/thumbnail URLs and byte sizes.
+     * Only non-null arguments are written.
+     */
+    void updateMomentFaceTaggingStorage(String momentId, String feedUrl, String thumbnailUrl,
+            Long optimisedSizeBytes, Long thumbnailSizeBytes) throws ExecutionException, InterruptedException;
     
     int updateAllMomentsCreatorRoleForEvent(String eventId, String creatorRole) throws ExecutionException, InterruptedException;
 }

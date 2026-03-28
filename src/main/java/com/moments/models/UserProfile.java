@@ -5,6 +5,10 @@ import java.util.List;
 
 public class UserProfile {
     private String userId;
+    /** Lowercase email from Google / email-password account (studio login). */
+    private String emailId;
+    /** Firebase Authentication UID (links profile to Google or email sign-in). */
+    private String firebaseUid;
     private String phoneNumber;
     private String name;
     private Role role;
@@ -55,6 +59,22 @@ public class UserProfile {
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    public String getEmailId() {
+        return emailId;
+    }
+
+    public void setEmailId(String emailId) {
+        this.emailId = emailId;
+    }
+
+    public String getFirebaseUid() {
+        return firebaseUid;
+    }
+
+    public void setFirebaseUid(String firebaseUid) {
+        this.firebaseUid = firebaseUid;
     }
 
     public String getPhoneNumber() {
@@ -109,6 +129,8 @@ public class UserProfile {
     public String toString() {
         return "UserProfile{" +
                 "userId='" + userId + '\'' +
+                ", emailId='" + emailId + '\'' +
+                ", firebaseUid='" + firebaseUid + '\'' +
                 ", phoneNumber='" + phoneNumber + '\'' +
                 ", name='" + name + '\'' +
                 ", role=" + role +

@@ -118,9 +118,14 @@ public class UserProfileDaoImpl implements UserProfileDao {
     @Override
     public UserProfile addUserToEvent(String userId, String eventId) throws ExecutionException, InterruptedException {
         UserProfile userProfile = getUserProfile(userId);
-        if(userProfile!=null && !userProfile.getEventIds().contains(eventId)){
-            userProfile.getEventIds().add(eventId);
-            updateUserProfile(userProfile);
+        if (userProfile != null) {
+            if (userProfile.getEventIds() == null) {
+                userProfile.setEventIds(new ArrayList<>());
+            }
+            if (!userProfile.getEventIds().contains(eventId)) {
+                userProfile.getEventIds().add(eventId);
+                updateUserProfile(userProfile);
+            }
         }
         return userProfile;
     }
@@ -165,6 +170,46 @@ public class UserProfileDaoImpl implements UserProfileDao {
             UserProfile userProfile = document.toObject(UserProfile.class);
             return userProfile;
 
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    @Override
+    public UserProfile findByFirebaseUid(String firebaseUid) {
+        if (firebaseUid == null || firebaseUid.isEmpty()) {
+            return null;
+        }
+        try {
+            CollectionReference userProfiles = db.collection("UserProfile");
+            Query query = userProfiles.whereEqualTo("firebaseUid", firebaseUid);
+            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            if (querySnapshot.get().isEmpty()) {
+                return null;
+            }
+            DocumentSnapshot document = querySnapshot.get().getDocuments().get(0);
+            return document.toObject(UserProfile.class);
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    @Override
+    public UserProfile findByEmailId(String emailIdLowercase) {
+        if (emailIdLowercase == null || emailIdLowercase.isEmpty()) {
+            return null;
+        }
+        try {
+            CollectionReference userProfiles = db.collection("UserProfile");
+            Query query = userProfiles.whereEqualTo("emailId", emailIdLowercase);
+            ApiFuture<QuerySnapshot> querySnapshot = query.get();
+            if (querySnapshot.get().isEmpty()) {
+                return null;
+            }
+            DocumentSnapshot document = querySnapshot.get().getDocuments().get(0);
+            return document.toObject(UserProfile.class);
         } catch (InterruptedException | ExecutionException e) {
             e.printStackTrace();
             return null;
