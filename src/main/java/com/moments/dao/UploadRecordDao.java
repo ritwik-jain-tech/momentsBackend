@@ -13,4 +13,7 @@ public interface UploadRecordDao {
     void mergeFields(String id, Map<String, Object> fields) throws ExecutionException, InterruptedException;
 
     List<UploadRecord> listByUserIdNewestFirst(String userId) throws ExecutionException, InterruptedException;
+
+    /** @return null if missing */
+    UploadRecord getById(String id) throws ExecutionException, InterruptedException;
 }

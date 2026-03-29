@@ -51,6 +51,16 @@ public class MomentDaoImpl implements MomentDao {
     }
 
     @Override
+    public boolean momentExists(String momentId) throws ExecutionException, InterruptedException {
+        if (momentId == null || momentId.isBlank()) {
+            return false;
+        }
+        DocumentReference ref = firestore.collection(COLLECTION_NAME).document(momentId);
+        DocumentSnapshot snap = ref.get().get();
+        return snap.exists();
+    }
+
+    @Override
     public Moment getMomentById(String id) throws ExecutionException, InterruptedException {
         DocumentReference documentReference = firestore.collection(COLLECTION_NAME).document(id);
         ApiFuture<DocumentSnapshot> future = documentReference.get();

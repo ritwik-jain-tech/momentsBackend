@@ -65,4 +65,7 @@ public interface MomentDao {
             Long optimisedSizeBytes, Long thumbnailSizeBytes) throws ExecutionException, InterruptedException;
     
     int updateAllMomentsCreatorRoleForEvent(String eventId, String creatorRole) throws ExecutionException, InterruptedException;
+
+    /** True if a moment document exists with this id (for idempotent Drive import). */
+    boolean momentExists(String momentId) throws ExecutionException, InterruptedException;
 }

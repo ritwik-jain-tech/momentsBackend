@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.moments.dao.UploadRecordDao;
+import com.moments.models.GoogleDriveImportRequest;
 import com.moments.models.UploadRecord;
 
 @Service
@@ -70,6 +71,7 @@ public class UploadRecordService {
         m.put("failedCount", failedCount);
         m.put("status", UploadRecord.STATUS_DONE);
         m.put("errorMessage", null);
+        m.put("pauseRequested", Boolean.FALSE);
         uploadRecordDao.mergeFields(recordId, m);
         log.info("UploadRecord {} DONE progress={} failed={}", recordId, momentsImported, failedCount);
     }
@@ -82,6 +84,7 @@ public class UploadRecordService {
         Map<String, Object> m = new HashMap<>();
         m.put("status", UploadRecord.STATUS_FAILED);
         m.put("errorMessage", errorMessage != null ? errorMessage : "Unknown error");
+        m.put("pauseRequested", Boolean.FALSE);
         uploadRecordDao.mergeFields(recordId, m);
         log.warn("UploadRecord {} FAILED: {}", recordId, errorMessage);
     }

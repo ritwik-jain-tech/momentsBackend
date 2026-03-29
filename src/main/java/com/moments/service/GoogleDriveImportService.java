@@ -12,6 +12,9 @@ import java.security.GeneralSecurityException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -302,6 +305,7 @@ public class GoogleDriveImportService {
 
         int created = 0;
         int failed = 0;
+        int skipped = 0;
 
         try {
             for (int start = 0; start < images.size(); start += PROCESS_BATCH) {
@@ -310,10 +314,12 @@ public class GoogleDriveImportService {
                 for (int i = start; i < end; i++) {
                     File driveFile = images.get(i);
                     try {
-                        Moment moment = downloadAndBuildMoment(access.drive, driveFile, eventId, creatorId, userName,
-                                access.supportsAllDrives);
-                        if (moment != null) {
-                            batch.add(moment);
+                        DriveImportOutcome outcome = importDriveImageFile(access.drive, driveFile, eventId, creatorId,
+                                userName, access.supportsAllDrives);
+                        if (outcome.skippedDuplicate) {
+                            skipped++;
+                        } else if (outcome.moment != null) {
+                            batch.add(outcome.moment);
                         }
                     } catch (Exception e) {
                         failed++;
@@ -331,16 +337,17 @@ public class GoogleDriveImportService {
                     created += ids.size();
                 }
                 try {
-                    uploadRecordService.updateDriveImportProgress(rid, created, failed);
+                    uploadRecordService.updateDriveImportProgress(rid, created + skipped, failed);
                 } catch (Exception e) {
                     logger.warn("UploadRecord progress: {}", e.getMessage());
                 }
             }
 
             response.setMomentsCreated(created);
+            response.setMomentsSkipped(skipped);
             response.setFailed(failed);
             try {
-                uploadRecordService.markDriveImportDone(rid, created, failed);
+                uploadRecordService.markDriveImportDone(rid, created + skipped, failed);
             } catch (Exception e) {
                 logger.warn("UploadRecord mark done: {}", e.getMessage());
             }
@@ -553,65 +560,115 @@ public class GoogleDriveImportService {
         } while (pageToken != null);
     }
 
-    private Moment downloadAndBuildMoment(Drive drive, File driveFile, String eventId, String creatorId,
-            String userName,
-            boolean supportsAllDrives) throws IOException {
-        Drive.Files.Get getReq = drive.files().get(driveFile.getId());
-        if (supportsAllDrives) {
-            getReq.setSupportsAllDrives(true);
-        }
-        HttpResponse mediaResp = getReq.executeMedia();
-        InputStream raw = mediaResp.getContent();
-        if (raw == null) {
-            mediaResp.disconnect();
-            return null;
-        }
-        try (InputStream in = raw) {
-            PrefixCaptureInputStream capturing = new PrefixCaptureInputStream(in, DRIVE_IMPORT_PREFIX_PROBE_BYTES);
-            String mime = driveFile.getMimeType() != null ? driveFile.getMimeType() : "image/jpeg";
-            String filename = driveFile.getName() != null ? driveFile.getName() : (driveFile.getId() + ".jpg");
-
-            FileUploadResponse uploaded = storageService.uploadStream(capturing, filename, FileType.IMAGE, mime);
-
-            long sizeBytes = uploaded.getSizeBytes() != null ? uploaded.getSizeBytes() : 0L;
-            if (sizeBytes == 0) {
-                return null;
+    /**
+     * Stable Firestore document id for a Drive-sourced image so retries do not create duplicate moments.
+     */
+    private static String deterministicDriveMomentId(String eventId, String driveFileId) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            String payload = eventId.trim() + "\0" + driveFileId.trim();
+            byte[] hash = md.digest(payload.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder("drv");
+            for (int i = 0; i < 16; i++) {
+                sb.append(String.format("%02x", hash[i]));
             }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
 
-            int[] wh = readImageDimensionsFromPrefix(capturing.getPrefixBuffer(), capturing.getPrefixLength());
-            int width = wh[0];
-            int height = wh[1];
+    private DriveImportOutcome importDriveImageFile(Drive drive, File driveFile, String eventId, String creatorId,
+            String userName, boolean supportsAllDrives) throws IOException, ExecutionException, InterruptedException {
+        String blobName = storageService.driveImportObjectName(eventId, driveFile.getId());
+        String momentId = deterministicDriveMomentId(eventId, driveFile.getId());
 
-            long creationTime = resolveBestCreationTime(driveFile);
-            long aspectRatio = height > 0 ? Math.round((width * 1000.0) / height) : 0;
+        if (momentService.momentExists(momentId)) {
+            logger.debug("Drive import skip: moment already exists id={} driveFile={}", momentId, driveFile.getId());
+            return new DriveImportOutcome(null, true);
+        }
 
-            CreatorDetails details = new CreatorDetails();
-            details.setUserId(creatorId);
-            details.setUserName(userName);
-            details.setRole(PHOTOGRAPHER_ROLE);
+        FileUploadResponse uploaded;
+        int[] wh;
 
-            Media media = new Media();
-            media.setType(MediaType.IMAGE);
-            media.setUrl(uploaded.getPublicUrl());
-            media.setWidth(width);
-            media.setHeight(height);
+        if (storageService.blobExists(blobName)) {
+            ExistingImageBlobHead head = storageService.readImageBlobHead(blobName, DRIVE_IMPORT_PREFIX_PROBE_BYTES);
+            if (head == null || head.getSizeBytes() <= 0L) {
+                throw new IOException("GCS object missing or empty: " + blobName);
+            }
+            uploaded = new FileUploadResponse(head.getObjectName(), head.getContentType(), head.getPublicUrl(),
+                    head.getSizeBytes());
+            wh = readImageDimensionsFromPrefix(head.getPrefix(), head.getPrefixLength());
+        } else {
+            Drive.Files.Get getReq = drive.files().get(driveFile.getId());
+            if (supportsAllDrives) {
+                getReq.setSupportsAllDrives(true);
+            }
+            HttpResponse mediaResp = getReq.executeMedia();
+            InputStream raw = mediaResp.getContent();
+            if (raw == null) {
+                mediaResp.disconnect();
+                throw new IOException("Drive returned no content");
+            }
+            try (InputStream in = raw) {
+                PrefixCaptureInputStream capturing = new PrefixCaptureInputStream(in, DRIVE_IMPORT_PREFIX_PROBE_BYTES);
+                String mime = driveFile.getMimeType() != null ? driveFile.getMimeType() : "image/jpeg";
+                uploaded = storageService.uploadStreamToObjectName(capturing, blobName, FileType.IMAGE, mime);
+                long sizeBytes = uploaded.getSizeBytes() != null ? uploaded.getSizeBytes() : 0L;
+                if (sizeBytes == 0L) {
+                    throw new IOException("Uploaded object has zero size: " + blobName);
+                }
+                wh = readImageDimensionsFromPrefix(capturing.getPrefixBuffer(), capturing.getPrefixLength());
+            } finally {
+                mediaResp.disconnect();
+            }
+        }
 
-            Moment moment = new Moment();
-            moment.setCreatorId(creatorId);
-            moment.setEventId(eventId);
-            moment.setCreationTime(creationTime);
-            moment.setCreatorRole(PHOTOGRAPHER_ROLE);
-            moment.setCreatorDetails(details);
-            moment.setMedia(media);
-            moment.setAspectRatio(aspectRatio);
+        long sizeBytes = uploaded.getSizeBytes() != null ? uploaded.getSizeBytes() : 0L;
+        if (sizeBytes == 0L) {
+            throw new IOException("Resolved object has zero size: " + blobName);
+        }
+        int width = wh[0];
+        int height = wh[1];
 
-            MomentMemoryUsage usage = new MomentMemoryUsage();
-            usage.setOriginalUploadSizeBytes(sizeBytes);
-            moment.setMemoryUsage(usage);
+        long creationTime = resolveBestCreationTime(driveFile);
+        long aspectRatio = height > 0 ? Math.round((width * 1000.0) / height) : 0;
 
-            return moment;
-        } finally {
-            mediaResp.disconnect();
+        CreatorDetails details = new CreatorDetails();
+        details.setUserId(creatorId);
+        details.setUserName(userName);
+        details.setRole(PHOTOGRAPHER_ROLE);
+
+        Media media = new Media();
+        media.setType(MediaType.IMAGE);
+        media.setUrl(uploaded.getPublicUrl());
+        media.setWidth(width);
+        media.setHeight(height);
+
+        Moment moment = new Moment();
+        moment.setMomentId(momentId);
+        moment.setCreatorId(creatorId);
+        moment.setEventId(eventId);
+        moment.setCreationTime(creationTime);
+        moment.setCreatorRole(PHOTOGRAPHER_ROLE);
+        moment.setCreatorDetails(details);
+        moment.setMedia(media);
+        moment.setAspectRatio(aspectRatio);
+
+        MomentMemoryUsage usage = new MomentMemoryUsage();
+        usage.setOriginalUploadSizeBytes(sizeBytes);
+        moment.setMemoryUsage(usage);
+
+        return new DriveImportOutcome(moment, false);
+    }
+
+    private static final class DriveImportOutcome {
+        final Moment moment;
+        final boolean skippedDuplicate;
+
+        DriveImportOutcome(Moment moment, boolean skippedDuplicate) {
+            this.moment = moment;
+            this.skippedDuplicate = skippedDuplicate;
         }
     }
 

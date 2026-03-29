@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -34,6 +35,138 @@ public class GoogleCloudStorageService {
 
     private final String bucketName = System.getProperty("gcp.bucket.name", "momentslive");
     private final String cdnDomain = System.getProperty("gcp.cdn.domain", "images.moments.live");
+
+    /**
+     * Stable object name for Google Drive import: same Drive file id + event always maps to the same GCS key
+     * so retries skip re-upload and {@link MomentService} can use a matching deterministic Firestore id.
+     */
+    public String driveImportObjectName(String eventId, String driveFileId) {
+        String e = sanitizeGcsPathSegment(eventId);
+        String f = sanitizeGcsPathSegment(driveFileId);
+        return "drive-import/" + e + "/" + f;
+    }
+
+    public boolean blobExists(String objectName) {
+        if (objectName == null || objectName.isBlank()) {
+            return false;
+        }
+        Blob blob = storage.get(BlobId.of(bucketName, objectName));
+        return blob != null && blob.exists();
+    }
+
+    /**
+     * Reads up to {@code maxPrefixBytes} from the start of an image object for dimension probing.
+     *
+     * @return {@code null} if the object is missing
+     */
+    public ExistingImageBlobHead readImageBlobHead(String objectName, int maxPrefixBytes) throws IOException {
+        if (objectName == null || objectName.isBlank()) {
+            return null;
+        }
+        Blob blob = storage.get(BlobId.of(bucketName, objectName));
+        if (blob == null || !blob.exists()) {
+            return null;
+        }
+        long size = blob.getSize() != null ? blob.getSize() : 0L;
+        String contentType = blob.getContentType();
+        if (contentType == null || contentType.isBlank()) {
+            contentType = "image/jpeg";
+        }
+        String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
+        int cap = (size > 0L && maxPrefixBytes > 0) ? (int) Math.min(size, (long) maxPrefixBytes) : 0;
+        byte[] prefix = cap > 0 ? new byte[cap] : new byte[0];
+        int prefixLen = 0;
+        if (cap > 0) {
+            try (ReadChannel reader = blob.reader()) {
+                ByteBuffer buffer = ByteBuffer.wrap(prefix);
+                while (buffer.hasRemaining()) {
+                    int n = reader.read(buffer);
+                    if (n < 0) {
+                        break;
+                    }
+                }
+                prefixLen = buffer.position();
+            }
+        }
+        return new ExistingImageBlobHead(objectName, contentType, publicURL, size, prefix, prefixLen);
+    }
+
+    /**
+     * Stream upload to a fixed object name (Drive import idempotency). Caller must ensure the object should be
+     * created (e.g. {@link #blobExists(String)} is false).
+     */
+    public FileUploadResponse uploadStreamToObjectName(InputStream in, String objectName, FileType fileType,
+            String contentType) throws IOException {
+        if (objectName == null || objectName.isBlank()) {
+            throw new IllegalArgumentException("objectName is required");
+        }
+        if (contentType == null || contentType.isBlank()) {
+            contentType = fileType == FileType.IMAGE ? "image/jpeg" : "video/mp4";
+        }
+        BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, objectName)
+                .setContentType(contentType).build();
+        long written = streamToResumableChannel(blobInfo, in);
+        Blob blob = storage.get(blobInfo.getBlobId());
+        if (blob == null || !blob.exists()) {
+            throw new IOException("GCS object missing after upload: " + objectName);
+        }
+        String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
+        return new FileUploadResponse(objectName, contentType, publicURL, written);
+    }
+
+    private static String sanitizeGcsPathSegment(String raw) {
+        if (raw == null) {
+            return "unknown";
+        }
+        String t = raw.trim();
+        if (t.isEmpty()) {
+            return "unknown";
+        }
+        return t.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    public static final class ExistingImageBlobHead {
+        private final String objectName;
+        private final String contentType;
+        private final String publicUrl;
+        private final long sizeBytes;
+        private final byte[] prefix;
+        private final int prefixLength;
+
+        public ExistingImageBlobHead(String objectName, String contentType, String publicUrl, long sizeBytes,
+                byte[] prefix, int prefixLength) {
+            this.objectName = objectName;
+            this.contentType = contentType;
+            this.publicUrl = publicUrl;
+            this.sizeBytes = sizeBytes;
+            this.prefix = prefix != null ? prefix : new byte[0];
+            this.prefixLength = prefixLength;
+        }
+
+        public String getObjectName() {
+            return objectName;
+        }
+
+        public String getContentType() {
+            return contentType;
+        }
+
+        public String getPublicUrl() {
+            return publicUrl;
+        }
+
+        public long getSizeBytes() {
+            return sizeBytes;
+        }
+
+        public byte[] getPrefix() {
+            return prefix;
+        }
+
+        public int getPrefixLength() {
+            return prefixLength;
+        }
+    }
 
     public FileUploadResponse uploadFile(MultipartFile file, FileType fileType) throws IOException {
         String originalFilename = file.getOriginalFilename();

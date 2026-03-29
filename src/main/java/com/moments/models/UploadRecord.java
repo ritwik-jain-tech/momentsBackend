@@ -13,6 +13,7 @@ public class UploadRecord {
     public static final String STATUS_IN_PROGRESS = "IN_PROGRESS";
     public static final String STATUS_DONE = "DONE";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_PAUSED = "PAUSED";
 
     /** Firestore document id; not written as a field on the document. */
     @Exclude
@@ -116,6 +117,14 @@ public class UploadRecord {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public Boolean getPauseRequested() {
+        return pauseRequested;
+    }
+
+    public void setPauseRequested(Boolean pauseRequested) {
+        this.pauseRequested = pauseRequested;
     }
 
     public Long getCreatedAt() {

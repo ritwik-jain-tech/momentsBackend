@@ -72,4 +72,20 @@ public class UploadRecordDaoImpl implements UploadRecordDao {
         }
         return out;
     }
+
+    @Override
+    public UploadRecord getById(String id) throws ExecutionException, InterruptedException {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        DocumentSnapshot snap = firestore.collection(COLLECTION).document(id.trim()).get().get();
+        if (!snap.exists()) {
+            return null;
+        }
+        UploadRecord r = snap.toObject(UploadRecord.class);
+        if (r != null) {
+            r.setUploadRecordId(snap.getId());
+        }
+        return r;
+    }
 }
