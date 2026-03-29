@@ -434,18 +434,18 @@ public class MomentService {
 
         // Check user's role for this event and determine if we need to filter by creatorRole
         String creatorRoleFilter = null;
-        if (userId != null && eventId != null && !"123456".equals(eventId) && !Objects.equals(source, "web")) {
-            try {
-                String userRoleName = eventRoleService.getRoleName(eventId, userId);
-                // If roleName is not "admin" (case-insensitive), filter by creatorRole
-                if (userRoleName != null && !userRoleName.equalsIgnoreCase("admin")) {
-                    creatorRoleFilter = userRoleName;
-                }
-            } catch (Exception e) {
-                logger.warn("Error fetching role for userId: {} and eventId: {}. Error: {}", userId, eventId, e.getMessage());
-                // If we can't fetch the role, default to filtering by "Guest" for safety
-            }
-        }
+//        if (userId != null && eventId != null && !"123456".equals(eventId) && !Objects.equals(source, "web")) {
+//            try {
+//                String userRoleName = eventRoleService.getRoleName(eventId, userId);
+//                // If roleName is not "admin" (case-insensitive), filter by creatorRole
+//                if (userRoleName != null && !userRoleName.equalsIgnoreCase("admin")) {
+//                    creatorRoleFilter = userRoleName;
+//                }
+//            } catch (Exception e) {
+//                logger.warn("Error fetching role for userId: {} and eventId: {}. Error: {}", userId, eventId, e.getMessage());
+//                // If we can't fetch the role, default to filtering by "Guest" for safety
+//            }
+//        }
 
         List<Moment> moments;
         int totalCount;
