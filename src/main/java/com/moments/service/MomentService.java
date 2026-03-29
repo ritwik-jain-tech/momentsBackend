@@ -131,7 +131,9 @@ public class MomentService {
                 moment.setStatus(MomentStatus.APPROVED);
                 moment.setCreationTimeText(epocToString(moment.getCreationTime()));
                 moment.setUploadTimeText(epocToString(moment.getUploadTime()));
-                moment.setMomentId(generateMomentId(moment.getCreatorId()));
+                if (moment.getMomentId() == null || moment.getMomentId().isBlank()) {
+                    moment.setMomentId(generateMomentId(moment.getCreatorId()));
+                }
                 
                 // Set creatorRole from event unless already set on the moment
                 if ((moment.getCreatorRole() == null || moment.getCreatorRole().isBlank())
@@ -271,6 +273,10 @@ public class MomentService {
         long epochMs = Instant.now().toEpochMilli();
         int randomComponent = (int) (Math.random() * 1000); // 0-999
         return creatorId + "_" + epochMs + "_" + randomComponent;
+    }
+
+    public boolean momentExists(String momentId) throws ExecutionException, InterruptedException {
+        return momentDao.momentExists(momentId);
     }
 
     // Get a Moment by ID
