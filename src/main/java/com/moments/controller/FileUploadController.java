@@ -519,4 +519,80 @@ public class FileUploadController {
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
+
+    /**
+     * Request cooperative pause for a running Drive import (stops after the current batch).
+     */
+    @PostMapping("/upload-records/{recordId}/pause")
+    public ResponseEntity<BaseResponse> pauseUploadRecord(@PathVariable String recordId,
+            @RequestParam("userId") String userId) {
+        try {
+            if (recordId == null || recordId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("recordId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            uploadRecordService.requestPause(recordId, userId);
+            return ResponseEntity.ok(new BaseResponse(
+                    "Pause requested. The import will stop after the current batch.", HttpStatus.OK, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.CONFLICT, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to pause import: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Resume / retry a Drive import using the same record (idempotent for already-imported files).
+     */
+    @PostMapping("/upload-records/{recordId}/retrigger")
+    public ResponseEntity<BaseResponse> retriggerUploadRecord(@PathVariable String recordId,
+            @RequestParam("userId") String userId) {
+        try {
+            if (recordId == null || recordId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("recordId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            if (!googleDriveImportService.isConfigured()) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(new BaseResponse(
+                                "Google Drive import is not configured on the server.",
+                                HttpStatus.SERVICE_UNAVAILABLE, null));
+            }
+            UploadRecord record = uploadRecordService.assertRetriggerEligible(recordId, userId);
+            if (!googleDriveImportService.isDriveLinkAccessible(record.getDriveLink())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new BaseResponse(
+                                "This Drive link is not accessible (check sharing). Import was not restarted.",
+                                HttpStatus.FORBIDDEN, null));
+            }
+            GoogleDriveImportRequest req = uploadRecordService.commitRetriggerAndBuildRequest(record);
+            if (driveImportProperties.isAsyncImport()) {
+                googleDriveImportService.importFolderAsync(req);
+                return ResponseEntity.ok(new BaseResponse(
+                        "Import restarted. Progress will update on this card shortly.", HttpStatus.OK, null));
+            }
+            GoogleDriveImportResponse result = googleDriveImportService.importFolder(req);
+            String msg = result.isPaused()
+                    ? "Import paused again after restart."
+                    : String.format("Import finished: created %d, skipped %d, failed %d.",
+                            result.getMomentsCreated(), result.getMomentsSkipped(), result.getFailed());
+            return ResponseEntity.ok(new BaseResponse(msg, HttpStatus.OK, result));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.CONFLICT, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to restart import: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
 }

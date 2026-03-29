@@ -194,11 +194,21 @@ public class GoogleDriveImportService {
     public void importFolderAsync(GoogleDriveImportRequest request) {
         try {
             GoogleDriveImportResponse result = importFolder(request);
-            logger.info("Drive import finished for event {}: created={}, failed={}, found={}",
-                    request != null ? request.getEventId() : null,
-                    result.getMomentsCreated(),
-                    result.getFailed(),
-                    result.getImageFilesFound());
+            if (result.isPaused()) {
+                logger.info("Drive import paused for event {} record {}: created={} skipped={} failed={} found={}",
+                        request != null ? request.getEventId() : null,
+                        uploadRecordId(request),
+                        result.getMomentsCreated(),
+                        result.getMomentsSkipped(),
+                        result.getFailed(),
+                        result.getImageFilesFound());
+            } else {
+                logger.info("Drive import finished for event {}: created={}, failed={}, found={}",
+                        request != null ? request.getEventId() : null,
+                        result.getMomentsCreated(),
+                        result.getFailed(),
+                        result.getImageFilesFound());
+            }
             if (!result.getErrors().isEmpty()) {
                 logger.warn("Drive import completed with {} error(s): {}", result.getErrors().size(),
                         result.getErrors());
@@ -301,6 +311,17 @@ public class GoogleDriveImportService {
             logger.warn("UploadRecord afterDriveListing: {}", e.getMessage());
         }
 
+        if (!rid.isEmpty() && uploadRecordService.isPauseRequested(rid)) {
+            try {
+                uploadRecordService.acknowledgePause(rid, 0, 0);
+            } catch (Exception e) {
+                logger.warn("UploadRecord acknowledgePause after listing: {}", e.getMessage());
+            }
+            response.setImageFilesFound(images.size());
+            response.setPaused(true);
+            return response;
+        }
+
         String userName = "Photographer";
 
         int created = 0;
@@ -340,6 +361,19 @@ public class GoogleDriveImportService {
                     uploadRecordService.updateDriveImportProgress(rid, created + skipped, failed);
                 } catch (Exception e) {
                     logger.warn("UploadRecord progress: {}", e.getMessage());
+                }
+                if (!rid.isEmpty() && uploadRecordService.isPauseRequested(rid)) {
+                    try {
+                        uploadRecordService.acknowledgePause(rid, created + skipped, failed);
+                    } catch (Exception e) {
+                        logger.warn("UploadRecord acknowledgePause: {}", e.getMessage());
+                    }
+                    response.setImageFilesFound(images.size());
+                    response.setMomentsCreated(created);
+                    response.setMomentsSkipped(skipped);
+                    response.setFailed(failed);
+                    response.setPaused(true);
+                    return response;
                 }
             }
 
@@ -592,7 +626,8 @@ public class GoogleDriveImportService {
         int[] wh;
 
         if (storageService.blobExists(blobName)) {
-            ExistingImageBlobHead head = storageService.readImageBlobHead(blobName, DRIVE_IMPORT_PREFIX_PROBE_BYTES);
+            GoogleCloudStorageService.ExistingImageBlobHead head = storageService.readImageBlobHead(blobName,
+                    DRIVE_IMPORT_PREFIX_PROBE_BYTES);
             if (head == null || head.getSizeBytes() <= 0L) {
                 throw new IOException("GCS object missing or empty: " + blobName);
             }

@@ -36,6 +36,9 @@ public class UploadRecord {
     private String status;
     private String errorMessage;
 
+    /** When true, the running import stops after the current batch. */
+    private Boolean pauseRequested;
+
     private Long createdAt;
     private Long updatedAt;
 
