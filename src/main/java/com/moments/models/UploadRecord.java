@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.google.cloud.firestore.annotation.Exclude;
 
 /**
- * Tracks a Google Drive folder import job for the admin uploads UI.
+ * Tracks import/upload jobs for the admin uploads UI (Google Drive imports and finished computer upload sessions).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UploadRecord {
@@ -15,6 +15,11 @@ public class UploadRecord {
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_PAUSED = "PAUSED";
 
+    /** Import from Google Drive (async job). */
+    public static final String SOURCE_GOOGLE_DRIVE = "GOOGLE_DRIVE";
+    /** Direct upload from photographer device / browser (recorded when a session finishes). */
+    public static final String SOURCE_COMPUTER = "COMPUTER";
+
     /** Firestore document id; not written as a field on the document. */
     @Exclude
     private String uploadRecordId;
@@ -23,6 +28,9 @@ public class UploadRecord {
     private String eventId;
     private String creatorName;
     private String driveLink;
+
+    /** {@link #SOURCE_GOOGLE_DRIVE} or {@link #SOURCE_COMPUTER}; null treated as Drive for legacy rows. */
+    private String source;
 
     /** Number of image files discovered in Drive (set after listing). */
     private int totalCount;
@@ -80,6 +88,14 @@ public class UploadRecord {
 
     public void setDriveLink(String driveLink) {
         this.driveLink = driveLink;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 
     public int getTotalCount() {

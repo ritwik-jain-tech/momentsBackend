@@ -29,6 +29,7 @@ public class UploadRecordService {
         r.setEventId(eventId);
         r.setCreatorName(creatorName != null && !creatorName.isBlank() ? creatorName.trim() : "Photographer");
         r.setDriveLink(driveLink);
+        r.setSource(UploadRecord.SOURCE_GOOGLE_DRIVE);
         r.setTotalCount(0);
         r.setProgress(0);
         r.setFailedCount(0);
@@ -37,6 +38,45 @@ public class UploadRecordService {
         r.setPauseRequested(Boolean.FALSE);
         String id = uploadRecordDao.create(r);
         log.info("UploadRecord {} STARTED user={} event={}", id, userId, eventId);
+        return id;
+    }
+
+    /**
+     * Persists a finished “upload from computer” session for the admin activity feed (immediate DONE).
+     */
+    public String createCompletedComputerUpload(String userId, String eventId, String creatorName,
+            int uploadedCount, int failedCount) throws ExecutionException, InterruptedException {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        if (eventId == null || eventId.isBlank()) {
+            throw new IllegalArgumentException("eventId is required");
+        }
+        if (uploadedCount < 0 || failedCount < 0) {
+            throw new IllegalArgumentException("Counts must be non-negative");
+        }
+        int total = uploadedCount + failedCount;
+        if (total <= 0) {
+            throw new IllegalArgumentException("At least one file must be accounted for");
+        }
+        if (total > 500) {
+            throw new IllegalArgumentException("Too many files in one session (max 500)");
+        }
+        UploadRecord r = new UploadRecord();
+        r.setUserId(userId.trim());
+        r.setEventId(eventId.trim());
+        r.setCreatorName(creatorName != null && !creatorName.isBlank() ? creatorName.trim() : "Photographer");
+        r.setDriveLink(null);
+        r.setSource(UploadRecord.SOURCE_COMPUTER);
+        r.setTotalCount(total);
+        r.setProgress(uploadedCount);
+        r.setFailedCount(failedCount);
+        r.setStatus(UploadRecord.STATUS_DONE);
+        r.setErrorMessage(null);
+        r.setPauseRequested(Boolean.FALSE);
+        String id = uploadRecordDao.create(r);
+        log.info("UploadRecord {} COMPUTER session DONE user={} event={} ok={} fail={}",
+                id, userId, eventId, uploadedCount, failedCount);
         return id;
     }
 
@@ -148,6 +188,9 @@ public class UploadRecordService {
                 && !UploadRecord.STATUS_DONE.equals(st)) {
             throw new IllegalStateException(
                     "Only paused, failed, or finished imports can be restarted. Pause a running import first if needed.");
+        }
+        if (UploadRecord.SOURCE_COMPUTER.equals(r.getSource())) {
+            throw new IllegalStateException("Computer uploads cannot be restarted from this screen.");
         }
         if (r.getDriveLink() == null || r.getDriveLink().isBlank()) {
             throw new IllegalStateException("This record has no Drive link.");

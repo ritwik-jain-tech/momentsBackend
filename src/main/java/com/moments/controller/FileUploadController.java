@@ -11,6 +11,7 @@ import com.moments.models.MomentMemoryUsage;
 import com.moments.config.DriveImportProperties;
 import com.moments.models.GoogleDriveImportRequest;
 import com.moments.models.GoogleDriveImportResponse;
+import com.moments.models.ComputerUploadSessionRequest;
 import com.moments.models.UploadRecord;
 import com.moments.service.GoogleCloudStorageService;
 import com.moments.service.GoogleDriveImportService;
@@ -516,6 +517,41 @@ public class FileUploadController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Failed to list upload records: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Record a finished browser/computer upload session (creates a DONE {@link UploadRecord} for the activity UI).
+     */
+    @PostMapping("/upload-records/computer-session")
+    public ResponseEntity<BaseResponse> recordComputerUploadSession(
+            @RequestParam("userId") String userId,
+            @RequestBody ComputerUploadSessionRequest body) {
+        try {
+            if (userId == null || userId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("userId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            if (body == null || body.getEventId() == null || body.getEventId().isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("eventId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            String recordId = uploadRecordService.createCompletedComputerUpload(
+                    userId.trim(),
+                    body.getEventId().trim(),
+                    body.getCreatorName(),
+                    body.getUploadedCount(),
+                    body.getFailedCount());
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("uploadRecordId", recordId);
+            return ResponseEntity.ok(new BaseResponse("Upload session recorded.", HttpStatus.OK, data));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to record upload session: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
