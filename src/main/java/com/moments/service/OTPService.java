@@ -6,7 +6,6 @@ import com.moments.models.MessageCentralVerifyResponse;
 import com.moments.models.OTPRequest;
 import com.moments.models.OTPResponse;
 import com.moments.models.OTPVerificationMapping;
-import com.moments.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +14,6 @@ public class OTPService {
 
     @Autowired
     private OTPDao otpDao;
-
-    @Autowired
-    private JwtUtil jwtUtil;
 
     @Autowired
     private MessageCentralService messageCentralService;
@@ -57,11 +53,11 @@ public class OTPService {
         MessageCentralVerifyResponse response = messageCentralService.verifyOtp(mobileNumber, mapping.getVerificationId(), otpCode, countryCode);
         
         if (response!=null && response.getData()!=null && "VERIFICATION_COMPLETED".equals(response.getData().getVerificationStatus())) {
-            // Generate JWT token
-            String token = jwtUtil.generateToken(phoneNumber);
-            return new OTPResponse(true, token, "VERIFICATION_COMPLETED");
+            // Token is issued by the controller against the resolved userId (JWT subject must be
+            // the app userId, never a phone number). Return only the verification result here.
+            return new OTPResponse(true, null, "VERIFICATION_COMPLETED");
         }
-        
+
         return new OTPResponse(false, null, response.getMessage());
     }
 }

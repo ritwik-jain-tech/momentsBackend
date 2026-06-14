@@ -4,7 +4,9 @@ public class EventRole {
     private String roleId;  // Firestore document ID: eventId_userId
     private String eventId;
     private String userId;
-    private String roleName;  // "Guest", "Admin", etc.
+    private String roleName;  // Legacy free-form string ("admin", "Guest", "Photographer") — kept for the moments feed.
+    private String roleType;  // EventRoleType: COUPLE | GUEST | AGENCY
+    private String agencyRole; // AgencyRole when roleType == AGENCY (CAMERAMAN/EDITOR/...), else null
 
     // Default constructor
     public EventRole() {
@@ -49,5 +51,21 @@ public class EventRole {
 
     public void setRoleName(String roleName) {
         this.roleName = roleName;
+    }
+
+    public String getRoleType() {
+        return roleType;
+    }
+
+    public void setRoleType(String roleType) {
+        this.roleType = roleType;
+    }
+
+    public String getAgencyRole() {
+        return agencyRole;
+    }
+
+    public void setAgencyRole(String agencyRole) {
+        this.agencyRole = agencyRole;
     }
 }

@@ -5,6 +5,8 @@ import com.moments.dao.UserProfileDao;
 import com.moments.models.Event;
 import com.moments.models.GuestAppConfig;
 import com.moments.models.UserProfile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +22,8 @@ import java.util.Set;
 
 @Service
 public class EventService {
+
+    private static final Logger log = LoggerFactory.getLogger(EventService.class);
 
     @Autowired
     private EventDao eventDao;
@@ -91,9 +95,8 @@ public class EventService {
             try {
                 eventRoleService.createOrUpdateEventRole(event.getEventId(), event.getCreatorId(), "admin");
             } catch (Exception e) {
-                // Log error but don't fail event creation if role creation fails
-                // This ensures event creation succeeds even if role creation has issues
-                System.err.println("Warning: Failed to create admin role for event creator: " + e.getMessage());
+                // Don't fail event creation if role creation fails.
+                log.warn("Failed to create agency role for event creator {}: {}", event.getCreatorId(), e.getMessage());
             }
         }
         

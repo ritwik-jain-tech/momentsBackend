@@ -28,8 +28,5 @@ EXPOSE 8080
 
 ENV PORT 8080
 
-# Run the jar file with the dynamically defined port
-CMD ["java", "-jar", "app.jar", "--server.port=${PORT}"]
-
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Shell form so ${PORT} is expanded at runtime (Cloud Run injects PORT); defaults to 8080 locally.
+ENTRYPOINT ["sh", "-c", "java -jar app.jar --server.port=${PORT:-8080}"]

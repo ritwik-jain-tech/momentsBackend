@@ -8,6 +8,8 @@ import com.moments.service.OTPService;
 import com.moments.service.UserProfileService;
 import com.moments.service.NotificationService;
 import com.moments.utils.JwtUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/otp")
 public class OTPController {
+
+    private static final Logger log = LoggerFactory.getLogger(OTPController.class);
 
     @Autowired
     private OTPService otpService;
@@ -32,8 +36,8 @@ public class OTPController {
     @PostMapping("/send")
     public ResponseEntity<BaseResponse> sendOtp(@RequestBody OTPRequest otpRequest) {
         try {
-            if(otpRequest.getCountryCode()!=null){
-                System.out.println("Counrty Code found:"+ otpRequest.getCountryCode());
+            if (otpRequest.getCountryCode() != null) {
+                log.debug("Country code provided: {}", otpRequest.getCountryCode());
             }
             otpService.sendOtp(otpRequest.getPhoneNumber(), otpRequest.getCountryCode());
             return ResponseEntity.ok(new BaseResponse("OTP sent successfully", HttpStatus.OK, null));

@@ -23,7 +23,9 @@ public class BulkEventRoleRequest {
     public static class EventRoleItem {
         private String userId;
         private String eventId;
-        private String roleName;
+        private String roleName;   // legacy free-form (optional fallback)
+        private String roleType;   // COUPLE | GUEST | AGENCY (preferred)
+        private String agencyRole; // CAMERAMAN/EDITOR/... when roleType == AGENCY
 
         public EventRoleItem() {
         }
@@ -32,6 +34,22 @@ public class BulkEventRoleRequest {
             this.userId = userId;
             this.eventId = eventId;
             this.roleName = roleName;
+        }
+
+        public String getRoleType() {
+            return roleType;
+        }
+
+        public void setRoleType(String roleType) {
+            this.roleType = roleType;
+        }
+
+        public String getAgencyRole() {
+            return agencyRole;
+        }
+
+        public void setAgencyRole(String agencyRole) {
+            this.agencyRole = agencyRole;
         }
 
         public String getUserId() {
