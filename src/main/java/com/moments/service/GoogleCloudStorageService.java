@@ -1,5 +1,19 @@
 package com.moments.service;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.ByteBuffer;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.google.cloud.ReadChannel;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.Blob;
@@ -9,26 +23,51 @@ import com.google.cloud.storage.Storage;
 import com.moments.models.FileType;
 import com.moments.models.FileUploadResponse;
 import com.moments.models.Media;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.nio.ByteBuffer;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 @Service
 public class GoogleCloudStorageService {
 
     private static final Logger logger = LoggerFactory.getLogger(GoogleCloudStorageService.class);
 
-    /** Chunk size for GCS resumable uploads (avoids "Error writing request body" on large JPEGs). */
+    /**
+     * Chunk size for GCS resumable uploads (avoids "Error writing request body" on
+     * large JPEGs).
+     */
     private static final int GCS_WRITE_CHUNK_BYTES = 256 * 1024;
+
+    public static boolean isCanonCr3Filename(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        return name.toLowerCase(Locale.ROOT).endsWith(".cr3");
+    }
+
+    /**
+     * Browsers often omit or misreport MIME for Canon RAW; avoid storing CR3 as
+     * {@code image/jpeg}.
+     */
+    public static String effectiveImageContentType(String originalFilename, String reportedContentType) {
+        if (isCanonCr3Filename(originalFilename)) {
+            if (reportedContentType == null || reportedContentType.isBlank()) {
+                return "application/octet-stream";
+            }
+            if ("image/jpeg".equalsIgnoreCase(reportedContentType)) {
+                return "application/octet-stream";
+            }
+            return reportedContentType;
+        }
+        if (reportedContentType == null || reportedContentType.isBlank()) {
+            return "image/jpeg";
+        }
+        return reportedContentType;
+    }
+
+    public static String effectiveVideoContentType(String reportedContentType) {
+        if (reportedContentType == null || reportedContentType.isBlank()) {
+            return "video/mp4";
+        }
+        return reportedContentType;
+    }
 
     @Autowired
     private Storage storage;
@@ -37,8 +76,10 @@ public class GoogleCloudStorageService {
     private final String cdnDomain = System.getProperty("gcp.cdn.domain", "images.moments.live");
 
     /**
-     * Stable object name for Google Drive import: same Drive file id + event always maps to the same GCS key
-     * so retries skip re-upload and {@link MomentService} can use a matching deterministic Firestore id.
+     * Stable object name for Google Drive import: same Drive file id + event always
+     * maps to the same GCS key
+     * so retries skip re-upload and {@link MomentService} can use a matching
+     * deterministic Firestore id.
      */
     public String driveImportObjectName(String eventId, String driveFileId) {
         String e = sanitizeGcsPathSegment(eventId);
@@ -55,7 +96,8 @@ public class GoogleCloudStorageService {
     }
 
     /**
-     * Reads up to {@code maxPrefixBytes} from the start of an image object for dimension probing.
+     * Reads up to {@code maxPrefixBytes} from the start of an image object for
+     * dimension probing.
      *
      * @return {@code null} if the object is missing
      */
@@ -70,7 +112,12 @@ public class GoogleCloudStorageService {
         long size = blob.getSize() != null ? blob.getSize() : 0L;
         String contentType = blob.getContentType();
         if (contentType == null || contentType.isBlank()) {
-            contentType = "image/jpeg";
+            String base = blob.getName();
+            int slash = base != null ? base.lastIndexOf('/') : -1;
+            String leaf = (base != null && slash >= 0 && slash < base.length() - 1)
+                    ? base.substring(slash + 1)
+                    : base;
+            contentType = effectiveImageContentType(leaf, null);
         }
         String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
         int cap = (size > 0L && maxPrefixBytes > 0) ? (int) Math.min(size, (long) maxPrefixBytes) : 0;
@@ -92,7 +139,8 @@ public class GoogleCloudStorageService {
     }
 
     /**
-     * Stream upload to a fixed object name (Drive import idempotency). Caller must ensure the object should be
+     * Stream upload to a fixed object name (Drive import idempotency). Caller must
+     * ensure the object should be
      * created (e.g. {@link #blobExists(String)} is false).
      */
     public FileUploadResponse uploadStreamToObjectName(InputStream in, String objectName, FileType fileType,
@@ -123,6 +171,61 @@ public class GoogleCloudStorageService {
             return "unknown";
         }
         return t.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    /**
+     * Object key from the client filename only (no random suffix): same name → same
+     * GCS object (overwrite on
+     * duplicate upload). Uses the last path segment, then
+     * {@link #sanitizeGcsPathSegment}.
+     */
+    public static String gcsObjectNameFromOriginalFilename(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return "upload";
+        }
+        String base = originalFilename.replace('\\', '/').trim();
+        int slash = base.lastIndexOf('/');
+        if (slash >= 0 && slash < base.length() - 1) {
+            base = base.substring(slash + 1).trim();
+        }
+        if (base.isEmpty()) {
+            return "upload";
+        }
+        String sanitized = sanitizeGcsPathSegment(base);
+        if (sanitized.isEmpty() || "unknown".equals(sanitized)) {
+            return "upload";
+        }
+        final int maxLen = 850;
+        if (sanitized.length() <= maxLen) {
+            return sanitized;
+        }
+        int lastDot = sanitized.lastIndexOf('.');
+        if (lastDot > 0 && sanitized.length() - lastDot <= 20) {
+            String ext = sanitized.substring(lastDot);
+            int stemChars = maxLen - ext.length();
+            if (stemChars < 1) {
+                return sanitized.substring(0, maxLen);
+            }
+            if (stemChars >= lastDot) {
+                return sanitized.substring(0, lastDot) + ext;
+            }
+            return sanitized.substring(0, stemChars) + ext;
+        }
+        return sanitized.substring(0, maxLen);
+    }
+
+    /**
+     * Per-event object prefix:
+     * {@code events/{eventId}/{sanitizedOriginalFilename}}.
+     * When {@code eventId} is null/blank, uses {@code uploads/unscoped/} (e.g.
+     * cover upload before an event id exists).
+     */
+    public static String gcsObjectKey(String eventId, String originalFilename) {
+        String basename = gcsObjectNameFromOriginalFilename(originalFilename);
+        if (eventId == null || eventId.isBlank()) {
+            return "uploads/unscoped/" + basename;
+        }
+        return "events/" + sanitizeGcsPathSegment(eventId) + "/" + basename;
     }
 
     public static final class ExistingImageBlobHead {
@@ -169,36 +272,47 @@ public class GoogleCloudStorageService {
     }
 
     public FileUploadResponse uploadFile(MultipartFile file, FileType fileType) throws IOException {
+        return uploadFile(file, fileType, null);
+    }
+
+    public FileUploadResponse uploadFile(MultipartFile file, FileType fileType, String eventId) throws IOException {
         String originalFilename = file.getOriginalFilename();
-        String blobName =  originalFilename+Math.random() ;
-        
-        // Upload file as-is without compression
-        byte[] fileBytes = file.getBytes();
-        String contentType = file.getContentType();
-        
-        // Set default content type if not provided
-        if (contentType == null) {
-            if (fileType == FileType.IMAGE) {
-                contentType = "image/jpeg";
-            } else {
-                contentType = "video/mp4";
-            }
-        }
+        String blobName = gcsObjectKey(eventId, originalFilename);
+
+        String contentType = fileType == FileType.IMAGE
+                ? effectiveImageContentType(originalFilename, file.getContentType())
+                : effectiveVideoContentType(file.getContentType());
         BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
                 .setContentType(contentType).build();
 
-        Blob blob = uploadWithResumableChannel(blobInfo, fileBytes);
+        long written;
+        try (InputStream in = file.getInputStream()) {
+            written = streamToResumableChannel(blobInfo, in);
+        }
+        Blob blob = storage.get(blobInfo.getBlobId());
+        if (blob == null || !blob.exists()) {
+            throw new IOException("GCS object missing after upload: " + blobName);
+        }
 
         String publicURL = String.format("https://%s/%s", cdnDomain, blob.getName());
 
-        return new FileUploadResponse(blobName, contentType, publicURL, fileBytes.length);
+        return new FileUploadResponse(blobName, contentType, publicURL, written);
     }
 
-    public FileUploadResponse uploadBytes(byte[] fileBytes, String originalFilename, FileType fileType, String contentType) throws IOException {
+    public FileUploadResponse uploadBytes(byte[] fileBytes, String originalFilename, FileType fileType,
+            String contentType) throws IOException {
+        return uploadBytes(fileBytes, originalFilename, fileType, contentType, null);
+    }
+
+    public FileUploadResponse uploadBytes(byte[] fileBytes, String originalFilename, FileType fileType,
+            String contentType,
+            String eventId) throws IOException {
         String safeName = originalFilename != null ? originalFilename : "image";
-        String blobName = safeName.replaceAll("[^a-zA-Z0-9._-]", "_") + Math.random();
-        if (contentType == null || contentType.isBlank()) {
-            contentType = fileType == FileType.IMAGE ? "image/jpeg" : "video/mp4";
+        String blobName = gcsObjectKey(eventId, safeName);
+        if (fileType == FileType.IMAGE) {
+            contentType = effectiveImageContentType(safeName, contentType);
+        } else {
+            contentType = effectiveVideoContentType(contentType);
         }
         BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
                 .setContentType(contentType).build();
@@ -208,14 +322,23 @@ public class GoogleCloudStorageService {
     }
 
     /**
-     * Streams bytes to GCS (resumable upload, fixed read buffer) so callers are not limited by heap size.
+     * Streams bytes to GCS (resumable upload, fixed read buffer) so callers are not
+     * limited by heap size.
      * Used for Google Drive import of large originals.
      */
-    public FileUploadResponse uploadStream(InputStream in, String originalFilename, FileType fileType, String contentType) throws IOException {
+    public FileUploadResponse uploadStream(InputStream in, String originalFilename, FileType fileType,
+            String contentType) throws IOException {
+        return uploadStream(in, originalFilename, fileType, contentType, null);
+    }
+
+    public FileUploadResponse uploadStream(InputStream in, String originalFilename, FileType fileType,
+            String contentType, String eventId) throws IOException {
         String safeName = originalFilename != null ? originalFilename : "image";
-        String blobName = safeName.replaceAll("[^a-zA-Z0-9._-]", "_") + Math.random();
-        if (contentType == null || contentType.isBlank()) {
-            contentType = fileType == FileType.IMAGE ? "image/jpeg" : "video/mp4";
+        String blobName = gcsObjectKey(eventId, safeName);
+        if (fileType == FileType.IMAGE) {
+            contentType = effectiveImageContentType(safeName, contentType);
+        } else {
+            contentType = effectiveVideoContentType(contentType);
         }
         BlobInfo blobInfo = BlobInfo.newBuilder(bucketName, blobName)
                 .setContentType(contentType).build();
@@ -229,8 +352,10 @@ public class GoogleCloudStorageService {
     }
 
     /**
-     * Uses a {@link WriteChannel} (resumable upload) instead of {@link Storage#create(BlobInfo, byte[])} so large
-     * images from Drive import do not fail with client errors such as "Error writing request body to server".
+     * Uses a {@link WriteChannel} (resumable upload) instead of
+     * {@link Storage#create(BlobInfo, byte[])} so large
+     * images from Drive import do not fail with client errors such as "Error
+     * writing request body to server".
      */
     private Blob uploadWithResumableChannel(BlobInfo blobInfo, byte[] fileBytes) throws IOException {
         try (WriteChannel writer = storage.writer(blobInfo)) {
@@ -268,7 +393,8 @@ public class GoogleCloudStorageService {
     }
 
     /**
-     * Deletes all CDN objects referenced by the moment's media (original, feed, thumbnail).
+     * Deletes all CDN objects referenced by the moment's media (original, feed,
+     * thumbnail).
      * Ignores null URLs and URLs that are not served from this app's bucket/CDN.
      */
     public void deleteMediaObjects(Media media) {
@@ -301,7 +427,8 @@ public class GoogleCloudStorageService {
     }
 
     /**
-     * Resolves object name in {@link #bucketName} from a public HTTPS URL, if it targets this CDN host.
+     * Resolves object name in {@link #bucketName} from a public HTTPS URL, if it
+     * targets this CDN host.
      */
     public String objectNameFromPublicUrl(String publicUrl) {
         if (publicUrl == null || publicUrl.isBlank()) {
@@ -335,4 +462,3 @@ public class GoogleCloudStorageService {
         return cdnDomain;
     }
 }
-
