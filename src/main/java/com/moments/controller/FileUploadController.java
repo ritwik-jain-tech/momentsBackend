@@ -17,6 +17,9 @@ import com.moments.service.GoogleCloudStorageService;
 import com.moments.service.GoogleDriveImportService;
 import com.moments.service.MomentService;
 import com.moments.service.UploadRecordService;
+import com.moments.util.Cr3PreviewExtractor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +27,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,6 +48,8 @@ import java.util.concurrent.ExecutionException;
     methods = {RequestMethod.POST, RequestMethod.OPTIONS, RequestMethod.GET, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE, RequestMethod.HEAD}
 )
 public class FileUploadController {
+
+    private static final Logger logger = LoggerFactory.getLogger(FileUploadController.class);
 
     @Autowired
     private GoogleCloudStorageService storageService;
@@ -64,14 +72,18 @@ public class FileUploadController {
     private static final int BATCH_SIZE = 5;
 
     @PostMapping("/upload")
-    public ResponseEntity<BaseResponse> uploadFile(@RequestParam("file") MultipartFile file, @RequestParam("fileType") FileType fileType) {
+    public ResponseEntity<BaseResponse> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("fileType") FileType fileType,
+            @RequestParam(value = "eventId", required = false) String eventId) {
         try {
             if (file.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new BaseResponse("File cannot be empty",HttpStatus.BAD_REQUEST, null ));
             }
 
             // Upload the file and get its public URL
-            FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType);
+            String eid = eventId != null ? eventId.trim() : null;
+            FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType, eid);
             BaseResponse response = new BaseResponse("Successfully uploaded file",HttpStatus.OK, fileUploadResponse);
             return ResponseEntity.status(HttpStatus.OK).body(response);
         } catch (Exception e) {
@@ -82,7 +94,8 @@ public class FileUploadController {
     @PostMapping("/bulk-upload")
     public ResponseEntity<BaseResponse> bulkUploadFiles(
             @RequestParam("files") MultipartFile[] files,
-            @RequestParam("fileType") FileType fileType) {
+            @RequestParam("fileType") FileType fileType,
+            @RequestParam(value = "eventId", required = false) String eventId) {
         try {
             if (files == null || files.length == 0) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -94,6 +107,8 @@ public class FileUploadController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(new BaseResponse("Maximum 50 files allowed per request", HttpStatus.BAD_REQUEST, null));
             }
+
+            String eid = eventId != null ? eventId.trim() : null;
 
             List<FileUploadResponse> successfulFiles = new ArrayList<>();
             List<BulkUploadResponse.FileUploadError> failedFiles = new ArrayList<>();
@@ -115,7 +130,7 @@ public class FileUploadController {
                         }
 
                         // Upload the file and get its public URL
-                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType);
+                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType, eid);
                         successfulFiles.add(fileUploadResponse);
                     } catch (Exception e) {
                         failedFiles.add(new BulkUploadResponse.FileUploadError(
@@ -218,8 +233,9 @@ public class FileUploadController {
                             continue;
                         }
 
-                        // Upload the file and get its public URL
-                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, FileType.IMAGE);
+                        // Upload the file and get its public URL (scoped under events/{eventId}/)
+                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, FileType.IMAGE,
+                                eventId.trim());
                         
                         // Create Media object with the uploaded URL
                         Media media = new Media();
@@ -235,6 +251,9 @@ public class FileUploadController {
                         MomentMemoryUsage usage = new MomentMemoryUsage();
                         usage.setOriginalUploadSizeBytes(file.getSize());
                         moment.setMemoryUsage(usage);
+
+                        // CR3 is not browser-renderable; store its embedded JPEG preview as feedUrl.
+                        attachCr3PreviewIfNeeded(moment, file, eventId.trim());
 
                         momentsToCreate.add(moment);
                     } catch (Exception e) {
@@ -372,11 +391,16 @@ public class FileUploadController {
                             fileType = moment.getMedia().getType() == MediaType.VIDEO ? FileType.VIDEO : FileType.IMAGE;
                         }
 
-                        // Upload the file and get its public URL
-                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType);
+                        // Upload the file and get its public URL (scoped under events/{eventId}/)
+                        String uploadEventId = moment.getEventId() != null ? moment.getEventId().trim() : null;
+                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType, uploadEventId);
                         
                         // Update the moment's media URL with the uploaded URL
                         moment.getMedia().setUrl(fileUploadResponse.getPublicUrl());
+
+                        // CR3 is not browser-renderable; store its embedded JPEG preview as feedUrl
+                        // (skipped when the client already supplied a feedUrl preview).
+                        attachCr3PreviewIfNeeded(moment, file, uploadEventId);
 
                         MomentMemoryUsage usage = moment.getMemoryUsage() != null
                                 ? moment.getMemoryUsage()
@@ -630,5 +654,76 @@ public class FileUploadController {
                     .body(new BaseResponse("Failed to restart import: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
+    }
+
+    /**
+     * For a Canon CR3 upload, extracts the embedded JPEG preview and stores it as the moment's
+     * {@code media.feedUrl} (and {@code thumbnailUrl} when absent) so the moment is renderable in the
+     * feed immediately, before the Python face-tagging pipeline produces optimized derivatives.
+     *
+     * <p>No-op for non-CR3 files, or when the client already supplied a {@code feedUrl} preview.
+     * Failures are logged and swallowed so a preview problem never blocks moment creation.</p>
+     */
+    private void attachCr3PreviewIfNeeded(Moment moment, MultipartFile file, String eventId) {
+        if (moment == null || moment.getMedia() == null || file == null) {
+            return;
+        }
+        Media media = moment.getMedia();
+        String originalFilename = file.getOriginalFilename();
+        if (!GoogleCloudStorageService.isCanonCr3Filename(originalFilename)) {
+            return;
+        }
+        if (media.getFeedUrl() != null && !media.getFeedUrl().isBlank()) {
+            // Client already extracted an embedded-JPEG preview and set feedUrl; keep it.
+            return;
+        }
+        try {
+            byte[] prefix = readPrefix(file, Cr3PreviewExtractor.DEFAULT_SCAN_LIMIT_BYTES);
+            byte[] jpeg = Cr3PreviewExtractor.extractLargestJpeg(prefix);
+            if (jpeg == null) {
+                logger.warn("CR3 preview: no embedded JPEG found in {}", originalFilename);
+                return;
+            }
+            String previewName = cr3PreviewObjectName(originalFilename);
+            FileUploadResponse preview = storageService.uploadBytes(
+                    jpeg, previewName, FileType.IMAGE, "image/jpeg", eventId);
+            media.setFeedUrl(preview.getPublicUrl());
+            if (media.getThumbnailUrl() == null || media.getThumbnailUrl().isBlank()) {
+                media.setThumbnailUrl(preview.getPublicUrl());
+            }
+            logger.info("CR3 preview: attached embedded JPEG for {} -> {} ({} bytes)",
+                    originalFilename, preview.getPublicUrl(), jpeg.length);
+        } catch (Exception e) {
+            logger.warn("CR3 preview extraction failed for {}: {}", originalFilename, e.getMessage());
+        }
+    }
+
+    /** Reads up to {@code maxBytes} from the start of the upload (embedded CR3 previews live near the front). */
+    private static byte[] readPrefix(MultipartFile file, int maxBytes) throws IOException {
+        try (InputStream in = file.getInputStream()) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream(Math.min(maxBytes, 1 << 20));
+            byte[] chunk = new byte[64 * 1024];
+            int total = 0;
+            int n;
+            while (total < maxBytes && (n = in.read(chunk, 0, Math.min(chunk.length, maxBytes - total))) != -1) {
+                bos.write(chunk, 0, n);
+                total += n;
+            }
+            return bos.toByteArray();
+        }
+    }
+
+    /** {@code events/{eventId}/foo.cr3} -> preview object {@code foo_preview.jpg}. */
+    private static String cr3PreviewObjectName(String originalFilename) {
+        String base = originalFilename == null || originalFilename.isBlank() ? "image" : originalFilename;
+        int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        if (slash >= 0 && slash < base.length() - 1) {
+            base = base.substring(slash + 1);
+        }
+        int dot = base.lastIndexOf('.');
+        if (dot > 0) {
+            base = base.substring(0, dot);
+        }
+        return base + "_preview.jpg";
     }
 }
