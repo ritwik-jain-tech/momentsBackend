@@ -252,6 +252,13 @@ public class FileUploadController {
                         usage.setOriginalUploadSizeBytes(file.getSize());
                         moment.setMemoryUsage(usage);
 
+                        // Idempotency: stable moment id from the deterministic GCS object key so a
+                        // re-uploaded file maps to the same moment instead of a duplicate.
+                        String detId = momentService.deterministicUploadMomentId(fileUploadResponse.getFileName());
+                        if (detId != null) {
+                            moment.setMomentId(detId);
+                        }
+
                         // CR3 is not browser-renderable; store its embedded JPEG preview as feedUrl.
                         attachCr3PreviewIfNeeded(moment, file, eventId.trim());
 
@@ -397,6 +404,16 @@ public class FileUploadController {
                         
                         // Update the moment's media URL with the uploaded URL
                         moment.getMedia().setUrl(fileUploadResponse.getPublicUrl());
+
+                        // Idempotency: derive a stable moment id from the (deterministic) GCS object
+                        // key so re-uploading the same file to the same event doesn't create a
+                        // duplicate moment. Only set it when the client didn't provide one.
+                        if (moment.getMomentId() == null || moment.getMomentId().isBlank()) {
+                            String detId = momentService.deterministicUploadMomentId(fileUploadResponse.getFileName());
+                            if (detId != null) {
+                                moment.setMomentId(detId);
+                            }
+                        }
 
                         // CR3 is not browser-renderable; store its embedded JPEG preview as feedUrl
                         // (skipped when the client already supplied a feedUrl preview).
