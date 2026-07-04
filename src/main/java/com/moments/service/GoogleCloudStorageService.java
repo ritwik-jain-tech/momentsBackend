@@ -3,10 +3,13 @@ package com.moments.service;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URL;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,15 +17,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.google.auth.ServiceAccountSigner;
+import com.google.auth.oauth2.ComputeEngineCredentials;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.ImpersonatedCredentials;
 import com.google.cloud.ReadChannel;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
+import com.google.cloud.storage.HttpMethod;
 import com.google.cloud.storage.Storage;
 import com.moments.models.FileType;
 import com.moments.models.FileUploadResponse;
 import com.moments.models.Media;
+import com.moments.models.SignedUploadTarget;
 
 @Service
 public class GoogleCloudStorageService {
@@ -72,8 +81,22 @@ public class GoogleCloudStorageService {
     @Autowired
     private Storage storage;
 
+    /**
+     * Same credentials the {@link Storage} bean is built from. Needed to sign upload URLs:
+     * a key-file credential ({@link ServiceAccountSigner}) signs locally; Cloud Run's default
+     * {@link ComputeEngineCredentials} cannot, so we impersonate the runtime SA (IAM signBlob).
+     */
+    @Autowired
+    private GoogleCredentials googleCredentials;
+
     private final String bucketName = System.getProperty("gcp.bucket.name", "momentslive");
     private final String cdnDomain = System.getProperty("gcp.cdn.domain", "images.moments.live");
+
+    /** Signed upload URL lifetime. */
+    private static final long SIGNED_URL_TTL_SECONDS = 15 * 60;
+
+    /** Lazily-built signer (see {@link #signer()}); {@code null} until first use. */
+    private volatile ServiceAccountSigner cachedSigner;
 
     /**
      * Stable object name for Google Drive import: same Drive file id + event always
@@ -452,6 +475,95 @@ public class GoogleCloudStorageService {
             logger.debug("Could not parse URL for GCS object: {}", publicUrl);
             return null;
         }
+    }
+
+    /**
+     * Creates a V4-signed HTTP PUT URL so the browser can upload {@code originalFilename} directly
+     * to GCS (bypassing the Cloud Run request-size cap). The object key matches
+     * {@link #gcsObjectKey(String, String)} so the moment's deterministic id and idempotency behave
+     * exactly like the multipart path.
+     *
+     * <p>Content-Type is not bound into the signature, so the browser may PUT with any (or no)
+     * Content-Type without a {@code SignatureDoesNotMatch}. The returned {@code contentType} is the
+     * value the client should send for correct rendering.</p>
+     */
+    public SignedUploadTarget createUploadUrl(String eventId, String originalFilename, FileType fileType,
+            String reportedContentType) {
+        String objectName = gcsObjectKey(eventId, originalFilename);
+        String contentType = fileType == FileType.VIDEO
+                ? effectiveVideoContentType(reportedContentType)
+                : effectiveImageContentType(originalFilename, reportedContentType);
+
+        BlobInfo blobInfo = BlobInfo.newBuilder(BlobId.of(bucketName, objectName))
+                .setContentType(contentType).build();
+
+        URL signed = storage.signUrl(
+                blobInfo,
+                SIGNED_URL_TTL_SECONDS, TimeUnit.SECONDS,
+                Storage.SignUrlOption.httpMethod(HttpMethod.PUT),
+                Storage.SignUrlOption.withV4Signature(),
+                Storage.SignUrlOption.signWith(signer()));
+
+        String publicURL = String.format("https://%s/%s", cdnDomain, objectName);
+        return new SignedUploadTarget(originalFilename, objectName, signed.toString(), publicURL,
+                contentType, SIGNED_URL_TTL_SECONDS);
+    }
+
+    /**
+     * Signer for {@link #createUploadUrl}. Built once and cached.
+     * <ul>
+     *   <li>Local/dev: {@link #googleCredentials} comes from the service-account key file and is
+     *       itself a {@link ServiceAccountSigner} (signs locally, no extra permissions).</li>
+     *   <li>Cloud Run: default credentials cannot sign, so we impersonate the runtime service
+     *       account via the IAM Credentials {@code signBlob} API. The runtime SA needs
+     *       {@code roles/iam.serviceAccountTokenCreator} on itself and the IAM Credentials API
+     *       enabled.</li>
+     * </ul>
+     */
+    private ServiceAccountSigner signer() {
+        ServiceAccountSigner s = cachedSigner;
+        if (s != null) {
+            return s;
+        }
+        synchronized (this) {
+            if (cachedSigner != null) {
+                return cachedSigner;
+            }
+            if (googleCredentials instanceof ServiceAccountSigner) {
+                cachedSigner = (ServiceAccountSigner) googleCredentials;
+            } else {
+                String email = signingServiceAccountEmail();
+                if (email == null || email.isBlank()) {
+                    throw new IllegalStateException(
+                            "Cannot sign upload URLs: no service-account signer available and the runtime "
+                                    + "service-account email could not be resolved. Set GCS_SIGNING_SA_EMAIL.");
+                }
+                cachedSigner = ImpersonatedCredentials.create(
+                        googleCredentials,
+                        email,
+                        null,
+                        Arrays.asList("https://www.googleapis.com/auth/devstorage.read_write"),
+                        3600);
+                logger.info("Signed-URL signer: impersonating runtime service account {}", email);
+            }
+            return cachedSigner;
+        }
+    }
+
+    /** Runtime SA email: explicit env override first, else the Compute/metadata identity. */
+    private String signingServiceAccountEmail() {
+        String env = System.getenv("GCS_SIGNING_SA_EMAIL");
+        if (env != null && !env.isBlank()) {
+            return env.trim();
+        }
+        try {
+            if (googleCredentials instanceof ComputeEngineCredentials) {
+                return ((ComputeEngineCredentials) googleCredentials).getAccount();
+            }
+        } catch (Exception e) {
+            logger.warn("Could not resolve service-account email from ComputeEngineCredentials: {}", e.getMessage());
+        }
+        return null;
     }
 
     public String getBucketName() {

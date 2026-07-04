@@ -12,8 +12,12 @@ import com.moments.config.DriveImportProperties;
 import com.moments.models.GoogleDriveImportRequest;
 import com.moments.models.GoogleDriveImportResponse;
 import com.moments.models.ComputerUploadSessionRequest;
+import com.moments.models.FinalizeUploadRequest;
+import com.moments.models.SignedUploadRequest;
+import com.moments.models.SignedUploadTarget;
 import com.moments.models.UploadRecord;
 import com.moments.service.GoogleCloudStorageService;
+import com.moments.service.GoogleCloudStorageService.ExistingImageBlobHead;
 import com.moments.service.GoogleDriveImportService;
 import com.moments.service.MomentService;
 import com.moments.service.UploadRecordService;
@@ -476,6 +480,155 @@ public class FileUploadController {
     }
 
     /**
+     * Issue direct-to-GCS signed PUT URLs so the browser can upload files (esp. large RAW/CR3
+     * originals) straight to Cloud Storage, bypassing Cloud Run's ~32 MiB request-body cap.
+     * After PUTting, the client calls {@link #finalizeMoments} to create the moments.
+     */
+    @PostMapping("/signed-upload-url")
+    public ResponseEntity<BaseResponse> createSignedUploadUrls(@RequestBody SignedUploadRequest request) {
+        try {
+            if (request == null || request.getFiles() == null || request.getFiles().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("files is required", HttpStatus.BAD_REQUEST, null));
+            }
+            if (request.getFiles().size() > 50) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Maximum 50 files per request", HttpStatus.BAD_REQUEST, null));
+            }
+            String eventId = request.getEventId() != null ? request.getEventId().trim() : null;
+
+            List<SignedUploadTarget> targets = new ArrayList<>();
+            for (SignedUploadRequest.Item item : request.getFiles()) {
+                if (item == null || item.getFilename() == null || item.getFilename().isBlank()) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(new BaseResponse("Each file requires a filename", HttpStatus.BAD_REQUEST, null));
+                }
+                FileType fileType = item.getFileType() != null ? item.getFileType() : FileType.IMAGE;
+                targets.add(storageService.createUploadUrl(
+                        eventId, item.getFilename(), fileType, item.getContentType()));
+            }
+            return ResponseEntity.ok(new BaseResponse("OK", HttpStatus.OK, targets));
+        } catch (IllegalStateException e) {
+            // Signer misconfiguration (e.g. missing IAM signBlob permission on Cloud Run).
+            logger.error("Signed upload URL generation failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(new BaseResponse("Direct upload is not available: " + e.getMessage(),
+                            HttpStatus.SERVICE_UNAVAILABLE, null));
+        } catch (Exception e) {
+            logger.error("Signed upload URL generation failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to create upload URLs: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Create moments for files already uploaded to GCS via {@link #createSignedUploadUrls} signed
+     * URLs. Each moment's {@code media.url} must be the {@code publicUrl} from the signed-URL step.
+     * Object size and any CR3 embedded-JPEG preview are read back from GCS (no file bytes here).
+     */
+    @PostMapping("/finalize-moments")
+    public ResponseEntity<BaseResponse> finalizeMoments(@RequestBody FinalizeUploadRequest request) {
+        try {
+            List<Moment> moments = request != null ? request.getMoments() : null;
+            if (moments == null || moments.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("moments is required", HttpStatus.BAD_REQUEST, null));
+            }
+            if (moments.size() > 50) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Maximum 50 moments per request", HttpStatus.BAD_REQUEST, null));
+            }
+
+            List<Moment> momentsToCreate = new ArrayList<>();
+            List<BulkUploadResponse.FileUploadError> failed = new ArrayList<>();
+
+            for (int i = 0; i < moments.size(); i++) {
+                Moment moment = moments.get(i);
+                String label = "moment[" + i + "]";
+                try {
+                    if (moment == null || moment.getMedia() == null
+                            || moment.getMedia().getUrl() == null || moment.getMedia().getUrl().isBlank()) {
+                        failed.add(new BulkUploadResponse.FileUploadError(label, "media.url is required"));
+                        continue;
+                    }
+                    if (moment.getCreatorId() == null || moment.getCreatorId().isBlank()
+                            || moment.getEventId() == null || moment.getEventId().isBlank()
+                            || moment.getCreationTime() == null || moment.getCreationTime() <= 0) {
+                        failed.add(new BulkUploadResponse.FileUploadError(label,
+                                "creatorId, eventId and a positive creationTime are required"));
+                        continue;
+                    }
+
+                    String publicUrl = moment.getMedia().getUrl();
+                    String objectName = storageService.objectNameFromPublicUrl(publicUrl);
+                    if (objectName == null) {
+                        failed.add(new BulkUploadResponse.FileUploadError(label,
+                                "media.url is not a recognized upload URL: " + publicUrl));
+                        continue;
+                    }
+
+                    // Read object head from GCS for size + CR3 preview; verifies the object exists.
+                    ExistingImageBlobHead head = storageService.readImageBlobHead(
+                            objectName, Cr3PreviewExtractor.DEFAULT_SCAN_LIMIT_BYTES);
+                    if (head == null) {
+                        failed.add(new BulkUploadResponse.FileUploadError(label,
+                                "Uploaded object not found in storage: " + objectName));
+                        continue;
+                    }
+
+                    MomentMemoryUsage usage = moment.getMemoryUsage() != null
+                            ? moment.getMemoryUsage()
+                            : new MomentMemoryUsage();
+                    usage.setOriginalUploadSizeBytes(head.getSizeBytes());
+                    moment.setMemoryUsage(usage);
+
+                    if (moment.getMedia().getType() == null) {
+                        moment.getMedia().setType(MediaType.IMAGE);
+                    }
+
+                    if (moment.getMomentId() == null || moment.getMomentId().isBlank()) {
+                        String detId = momentService.deterministicUploadMomentId(objectName);
+                        if (detId != null) {
+                            moment.setMomentId(detId);
+                        }
+                    }
+
+                    attachCr3PreviewFromGcs(moment, objectName, head, moment.getEventId().trim());
+
+                    momentsToCreate.add(moment);
+                } catch (Exception e) {
+                    failed.add(new BulkUploadResponse.FileUploadError(label, "Finalize failed: " + e.getMessage()));
+                }
+            }
+
+            List<String> createdMomentIds = new ArrayList<>();
+            if (!momentsToCreate.isEmpty()) {
+                try {
+                    createdMomentIds = momentService.saveMoments(momentsToCreate, false);
+                } catch (ExecutionException | InterruptedException e) {
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(new BaseResponse("Failed to create moments: " + e.getMessage(),
+                                    HttpStatus.INTERNAL_SERVER_ERROR, null));
+                }
+            }
+
+            BulkUploadResponse bulkResponse = new BulkUploadResponse(
+                    moments.size(), createdMomentIds.size(), failed.size(), null, failed);
+            HttpStatus status = failed.isEmpty() ? HttpStatus.OK
+                    : (createdMomentIds.isEmpty() ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.PARTIAL_CONTENT);
+            String message = failed.isEmpty()
+                    ? String.format("Created %d moment(s)", createdMomentIds.size())
+                    : String.format("Created %d of %d moment(s)", createdMomentIds.size(), moments.size());
+            return ResponseEntity.status(status).body(new BaseResponse(message, status, bulkResponse));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Internal Server Error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
      * Import images from a publicly shared Google Drive folder or file link (recursive for folders).
      * Configure {@code google.drive.api.key} for "Anyone with the link" content, or
      * {@code google.drive.credentials.path} for private/shared-drive folders.
@@ -712,6 +865,48 @@ public class FileUploadController {
                     originalFilename, preview.getPublicUrl(), jpeg.length);
         } catch (Exception e) {
             logger.warn("CR3 preview extraction failed for {}: {}", originalFilename, e.getMessage());
+        }
+    }
+
+    /**
+     * CR3 preview for the signed-URL (direct-to-GCS) path: the object is already in storage, so the
+     * embedded-JPEG preview is extracted from the object's prefix bytes (read via
+     * {@link GoogleCloudStorageService#readImageBlobHead}) rather than a {@link MultipartFile}.
+     * No-op for non-CR3 objects or when the client already supplied a {@code feedUrl}. Failures are
+     * logged and swallowed so a preview problem never blocks moment creation.
+     */
+    private void attachCr3PreviewFromGcs(Moment moment, String objectName, ExistingImageBlobHead head,
+            String eventId) {
+        if (moment == null || moment.getMedia() == null || head == null) {
+            return;
+        }
+        if (!GoogleCloudStorageService.isCanonCr3Filename(objectName)) {
+            return;
+        }
+        Media media = moment.getMedia();
+        if (media.getFeedUrl() != null && !media.getFeedUrl().isBlank()) {
+            return;
+        }
+        try {
+            byte[] prefix = head.getPrefixLength() == head.getPrefix().length
+                    ? head.getPrefix()
+                    : java.util.Arrays.copyOf(head.getPrefix(), head.getPrefixLength());
+            byte[] jpeg = Cr3PreviewExtractor.extractLargestJpeg(prefix);
+            if (jpeg == null) {
+                logger.warn("CR3 preview: no embedded JPEG found in {}", objectName);
+                return;
+            }
+            String previewName = cr3PreviewObjectName(objectName);
+            FileUploadResponse preview = storageService.uploadBytes(
+                    jpeg, previewName, FileType.IMAGE, "image/jpeg", eventId);
+            media.setFeedUrl(preview.getPublicUrl());
+            if (media.getThumbnailUrl() == null || media.getThumbnailUrl().isBlank()) {
+                media.setThumbnailUrl(preview.getPublicUrl());
+            }
+            logger.info("CR3 preview: attached embedded JPEG for {} -> {} ({} bytes)",
+                    objectName, preview.getPublicUrl(), jpeg.length);
+        } catch (Exception e) {
+            logger.warn("CR3 preview extraction failed for {}: {}", objectName, e.getMessage());
         }
     }
 
