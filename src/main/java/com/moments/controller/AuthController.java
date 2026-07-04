@@ -1,10 +1,5 @@
 package com.moments.controller;
 
-import com.google.firebase.auth.FirebaseAuthException;
-import com.moments.models.AuthSessionResponse;
-import com.moments.models.BaseResponse;
-import com.moments.models.FirebaseLoginRequest;
-import com.moments.service.FirebaseAuthService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +11,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.google.firebase.auth.FirebaseAuthException;
+import com.moments.models.AuthSessionResponse;
+import com.moments.models.BaseResponse;
+import com.moments.models.FirebaseLoginRequest;
+import com.moments.service.FirebaseAuthService;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -51,7 +52,8 @@ public class AuthController {
     }
 
     /**
-     * Legacy query-style call (same as older admin client expecting GET with idToken).
+     * Legacy query-style call (same as older admin client expecting GET with
+     * idToken).
      */
     @GetMapping("/firebase")
     public ResponseEntity<BaseResponse> firebaseSessionGet(

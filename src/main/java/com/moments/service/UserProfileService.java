@@ -112,6 +112,54 @@ public class UserProfileService {
         return changed;
     }
 
+    /**
+     * Looks up an existing profile by firebaseUid, then email — <em>without</em>
+     * falling back to phone or creating one. Used by the Google staged sign-in
+     * "start" step to decide whether the email is already known (log in) or the
+     * user must verify a phone number first. Inputs are normalized here.
+     */
+    public UserProfile findByFirebaseUidOrEmail(String firebaseUid, String email) {
+        String emailLower = IdentityUtils.normalizeEmail(email);
+        UserProfile profile = null;
+        if (firebaseUid != null && !firebaseUid.isBlank()) {
+            profile = userProfileDao.findByFirebaseUid(firebaseUid);
+        }
+        if (profile == null && emailLower != null) {
+            profile = userProfileDao.findByEmailId(emailLower);
+        }
+        return profile;
+    }
+
+    /**
+     * Attaches a verified Google identity (email + firebaseUid, optionally name)
+     * onto an already-resolved profile and persists it. Used when a phone-verified
+     * account has no Google email yet: the email/uid come from a verified Firebase
+     * token, so overwriting is safe. Phone number is left untouched.
+     *
+     * @return the re-hydrated profile (with event details), or the input when unchanged.
+     */
+    public UserProfile linkGoogleIdentity(UserProfile profile, String firebaseUid, String email, String name)
+            throws ExecutionException, InterruptedException {
+        String emailLower = IdentityUtils.normalizeEmail(email);
+        boolean changed = false;
+        if (emailLower != null && !emailLower.equals(profile.getEmailId())) {
+            profile.setEmailId(emailLower);
+            changed = true;
+        }
+        if (firebaseUid != null && !firebaseUid.isBlank() && !firebaseUid.equals(profile.getFirebaseUid())) {
+            profile.setFirebaseUid(firebaseUid);
+            changed = true;
+        }
+        if (name != null && !name.isBlank() && (profile.getName() == null || profile.getName().isBlank())) {
+            profile.setName(name);
+            changed = true;
+        }
+        if (changed) {
+            userProfileDao.updateUserProfile(profile);
+        }
+        return getUser(profile.getUserId());
+    }
+
     public UserProfile getUserProfileByFirebaseUid(String firebaseUid) {
         return userProfileDao.findByFirebaseUid(firebaseUid);
     }

@@ -6,6 +6,8 @@ public class MomentsResponse {
     private List<Moment> moments;
     private Cursor cursor;
     private boolean isReUploadRequired;
+    /** Populated on the first admin (web) feed page for tab badges. */
+    private AdminTabCounts adminTabCounts;
 
     public MomentsResponse(List<Moment> moments, Cursor cursor) {
         this.moments = moments;
@@ -34,6 +36,14 @@ public class MomentsResponse {
 
     public void setCursor(Cursor cursor) {
         this.cursor = cursor;
+    }
+
+    public AdminTabCounts getAdminTabCounts() {
+        return adminTabCounts;
+    }
+
+    public void setAdminTabCounts(AdminTabCounts adminTabCounts) {
+        this.adminTabCounts = adminTabCounts;
     }
 }
 

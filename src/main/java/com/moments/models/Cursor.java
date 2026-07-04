@@ -6,6 +6,10 @@ public class Cursor {
     private int limit;
     private Long lastCreatedTime;
     private boolean isLastPage;
+    private String anchorMomentId;
+
+    public Cursor() {
+    }
 
     public Cursor(int total, int offset, int limit, Long lastCreatedTime, boolean isLastPage) {
         this.total = total;
@@ -52,5 +56,13 @@ public class Cursor {
     }
     public void setLastPage(boolean lastPage) {
         this.isLastPage = lastPage;
+    }
+
+    public String getAnchorMomentId() {
+        return anchorMomentId;
+    }
+
+    public void setAnchorMomentId(String anchorMomentId) {
+        this.anchorMomentId = anchorMomentId;
     }
 }

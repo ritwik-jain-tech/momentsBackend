@@ -5,18 +5,18 @@ import java.io.ByteArrayInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Iterator;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Matcher;
@@ -45,6 +45,7 @@ import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.moments.config.DriveImportProperties;
 import com.moments.models.CreatorDetails;
 import com.moments.models.FileType;
 import com.moments.models.FileUploadResponse;
@@ -54,8 +55,6 @@ import com.moments.models.Media;
 import com.moments.models.MediaType;
 import com.moments.models.Moment;
 import com.moments.models.MomentMemoryUsage;
-
-import com.moments.config.DriveImportProperties;
 
 import jakarta.annotation.PostConstruct;
 
@@ -67,7 +66,10 @@ public class GoogleDriveImportService {
     private static final int MAX_FILES = 5000;
     private static final int MAX_FOLDER_DEPTH = 12;
     private static final int PROCESS_BATCH = 25;
-    /** Bytes of file start kept for width/height probe; avoids loading the whole file into heap. */
+    /**
+     * Bytes of file start kept for width/height probe; avoids loading the whole
+     * file into heap.
+     */
     private static final int DRIVE_IMPORT_PREFIX_PROBE_BYTES = 512 * 1024;
 
     private static final Pattern FOLDER_IN_PATH = Pattern.compile("/folders/([a-zA-Z0-9_-]+)");
@@ -102,7 +104,10 @@ public class GoogleDriveImportService {
     @Autowired
     private UploadRecordService uploadRecordService;
 
-    /** Same credentials as Firestore/Firebase (ADC on Cloud Run, classpath SA in local DEV). */
+    /**
+     * Same credentials as Firestore/Firebase (ADC on Cloud Run, classpath SA in
+     * local DEV).
+     */
     @Autowired
     private GoogleCredentials googleCredentials;
 
@@ -155,7 +160,8 @@ public class GoogleDriveImportService {
         if (hasReadableServiceAccountCredentials()) {
             return true;
         }
-        // Production Cloud Run: no env file path needed — use the runtime service account (same as other GCP APIs).
+        // Production Cloud Run: no env file path needed — use the runtime service
+        // account (same as other GCP APIs).
         return googleCredentials != null;
     }
 
@@ -470,7 +476,8 @@ public class GoogleDriveImportService {
 
     private DriveAccess buildDriveWithApplicationCredentials(NetHttpTransport transport) throws IOException {
         try {
-            GoogleCredentials scoped = googleCredentials.createScoped(Collections.singleton(DriveScopes.DRIVE_READONLY));
+            GoogleCredentials scoped = googleCredentials
+                    .createScoped(Collections.singleton(DriveScopes.DRIVE_READONLY));
             Drive drive = new Drive.Builder(transport, GsonFactory.getDefaultInstance(),
                     new HttpCredentialsAdapter(scoped))
                     .setApplicationName("Moments Backend")
@@ -530,14 +537,21 @@ public class GoogleDriveImportService {
             out.add(meta);
             return true;
         }
+        if (GoogleCloudStorageService.isCanonCr3Filename(meta.getName())) {
+            out.add(meta);
+            return true;
+        }
         if ("application/vnd.google-apps.shortcut".equals(mt) && meta.getShortcutDetails() != null) {
             File.ShortcutDetails sd = meta.getShortcutDetails();
             String targetMime = sd.getTargetMimeType();
-            if (targetMime != null && targetMime.startsWith("image/")) {
+            String nm = meta.getName() != null ? meta.getName() : sd.getTargetId();
+            boolean imageShortcut = targetMime != null && targetMime.startsWith("image/");
+            boolean cr3Shortcut = GoogleCloudStorageService.isCanonCr3Filename(nm);
+            if (imageShortcut || cr3Shortcut) {
                 File synthetic = new File();
                 synthetic.setId(sd.getTargetId());
-                synthetic.setName(meta.getName() != null ? meta.getName() : sd.getTargetId());
-                synthetic.setMimeType(targetMime);
+                synthetic.setName(nm);
+                synthetic.setMimeType(GoogleCloudStorageService.effectiveImageContentType(nm, targetMime));
                 synthetic.setModifiedTime(meta.getModifiedTime());
                 out.add(synthetic);
                 return true;
@@ -570,6 +584,9 @@ public class GoogleDriveImportService {
                 for (File f : files) {
                     String mt = f.getMimeType();
                     if (mt == null) {
+                        if (GoogleCloudStorageService.isCanonCr3Filename(f.getName())) {
+                            out.add(f);
+                        }
                         continue;
                     }
                     if ("application/vnd.google-apps.folder".equals(mt)) {
@@ -577,15 +594,20 @@ public class GoogleDriveImportService {
                     } else if ("application/vnd.google-apps.shortcut".equals(mt) && f.getShortcutDetails() != null) {
                         File.ShortcutDetails sd = f.getShortcutDetails();
                         String targetMime = sd.getTargetMimeType();
-                        if (targetMime != null && targetMime.startsWith("image/")) {
+                        String nm = f.getName() != null ? f.getName() : sd.getTargetId();
+                        boolean imageShortcut = targetMime != null && targetMime.startsWith("image/");
+                        boolean cr3Shortcut = GoogleCloudStorageService.isCanonCr3Filename(nm);
+                        if (imageShortcut || cr3Shortcut) {
                             File synthetic = new File();
                             synthetic.setId(sd.getTargetId());
-                            synthetic.setName(f.getName() != null ? f.getName() : sd.getTargetId());
-                            synthetic.setMimeType(targetMime);
+                            synthetic.setName(nm);
+                            synthetic.setMimeType(
+                                    GoogleCloudStorageService.effectiveImageContentType(nm, targetMime));
                             synthetic.setModifiedTime(f.getModifiedTime());
                             out.add(synthetic);
                         }
-                    } else if (mt.startsWith("image/")) {
+                    } else if (mt.startsWith("image/")
+                            || GoogleCloudStorageService.isCanonCr3Filename(f.getName())) {
                         out.add(f);
                     }
                 }
@@ -595,7 +617,8 @@ public class GoogleDriveImportService {
     }
 
     /**
-     * Stable Firestore document id for a Drive-sourced image so retries do not create duplicate moments.
+     * Stable Firestore document id for a Drive-sourced image so retries do not
+     * create duplicate moments.
      */
     private static String deterministicDriveMomentId(String eventId, String driveFileId) {
         try {
@@ -647,7 +670,8 @@ public class GoogleDriveImportService {
             }
             try (InputStream in = raw) {
                 PrefixCaptureInputStream capturing = new PrefixCaptureInputStream(in, DRIVE_IMPORT_PREFIX_PROBE_BYTES);
-                String mime = driveFile.getMimeType() != null ? driveFile.getMimeType() : "image/jpeg";
+                String mime = GoogleCloudStorageService.effectiveImageContentType(
+                        driveFile.getName(), driveFile.getMimeType());
                 uploaded = storageService.uploadStreamToObjectName(capturing, blobName, FileType.IMAGE, mime);
                 long sizeBytes = uploaded.getSizeBytes() != null ? uploaded.getSizeBytes() : 0L;
                 if (sizeBytes == 0L) {
@@ -665,6 +689,10 @@ public class GoogleDriveImportService {
         }
         int width = wh[0];
         int height = wh[1];
+        if (GoogleCloudStorageService.isCanonCr3Filename(driveFile.getName()) && (width <= 0 || height <= 0)) {
+            width = 390;
+            height = 844;
+        }
 
         long creationTime = resolveBestCreationTime(driveFile);
         long aspectRatio = height > 0 ? Math.round((width * 1000.0) / height) : 0;
@@ -742,7 +770,8 @@ public class GoogleDriveImportService {
     }
 
     /**
-     * Passes through the delegate stream while copying the first {@code maxPrefix} bytes into an internal buffer
+     * Passes through the delegate stream while copying the first {@code maxPrefix}
+     * bytes into an internal buffer
      * (for metadata probes) without holding the full object in memory.
      */
     private static final class PrefixCaptureInputStream extends FilterInputStream {

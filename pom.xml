@@ -38,7 +38,7 @@
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-firestore</artifactId>
-            <version>3.28.0</version> <!-- Check for the latest version -->
+            <version>3.30.8</version>
         </dependency>
         <dependency>
             <groupId>com.google.firebase</groupId>

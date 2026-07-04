@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -264,6 +265,29 @@ public class FaceTaggingService {
     public CompletableFuture<Void> processMomentsBatchAsync(List<Moment> moments) {
         processMomentsBatchSync(moments);
         return CompletableFuture.completedFuture(null);
+    }
+
+    /**
+     * Removes the moment's document from the face-tagging service (moment_face_embeddings).
+     * Best-effort: logs warnings and does not throw, so moment deletion can complete.
+     */
+    public void deleteMomentFaceEmbeddingBestEffort(String momentId) {
+        if (momentId == null || momentId.isBlank()) {
+            return;
+        }
+        try {
+            String url = faceTaggingServiceUrl + "/api/v1/face-embeddings/moment/" + momentId + "/embedding";
+            HttpDelete httpDelete = new HttpDelete(url);
+            try (CloseableHttpResponse response = httpClient.execute(httpDelete)) {
+                int code = response.getStatusLine().getStatusCode();
+                if (code < 200 || code >= 300) {
+                    String body = response.getEntity() != null ? EntityUtils.toString(response.getEntity()) : "";
+                    logger.warn("Face embedding delete returned {} for moment {}: {}", code, momentId, body);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to delete face embedding for moment {}: {}", momentId, e.getMessage());
+        }
     }
 
     /**

@@ -7,6 +7,50 @@ public class MomentFilter {
     private String likedById;
     private String TaggedToId;
 
+    /** Admin feed: moderation tab ({@code all} | pending | approved | rejected). */
+    private String adminModerationTab;
+
+    /** Admin feed: folder bucket — {@code videos} restricts to VIDEO; omit or {@code images} loads all media (client trims). */
+    private String adminMediaBucket;
+
+    /** Admin feed: creator role filter key ({@code all} | guest | photographer | groom | bride). */
+    private String adminCreatorRoleFilter;
+
+    /** Admin feed: aligns with dashboard sort keys (capture-time uses upload time desc). */
+    private String adminSort;
+
+    public String getAdminModerationTab() {
+        return adminModerationTab;
+    }
+
+    public void setAdminModerationTab(String adminModerationTab) {
+        this.adminModerationTab = adminModerationTab;
+    }
+
+    public String getAdminMediaBucket() {
+        return adminMediaBucket;
+    }
+
+    public void setAdminMediaBucket(String adminMediaBucket) {
+        this.adminMediaBucket = adminMediaBucket;
+    }
+
+    public String getAdminCreatorRoleFilter() {
+        return adminCreatorRoleFilter;
+    }
+
+    public void setAdminCreatorRoleFilter(String adminCreatorRoleFilter) {
+        this.adminCreatorRoleFilter = adminCreatorRoleFilter;
+    }
+
+    public String getAdminSort() {
+        return adminSort;
+    }
+
+    public void setAdminSort(String adminSort) {
+        this.adminSort = adminSort;
+    }
+
     public String getLikedById() {
         return likedById;
     }

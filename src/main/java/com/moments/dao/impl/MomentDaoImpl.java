@@ -5,11 +5,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import com.google.api.core.ApiFuture;
+import com.google.cloud.firestore.AggregateQuerySnapshot;
+import com.google.cloud.firestore.FieldPath;
 import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
@@ -21,6 +22,8 @@ import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.firestore.WriteResult;
 import com.moments.dao.MomentDao;
+import com.moments.models.AdminTabCounts;
+import com.moments.models.MediaType;
 import com.moments.models.Moment;
 import com.moments.models.MomentStatus;
 import com.moments.models.ReportRequest;
@@ -540,6 +543,119 @@ public class MomentDaoImpl implements MomentDao {
         }
         
         return updateCount;
+    }
+
+    private static String moderationStatusStored(MomentStatus s) {
+        return s == null ? null : s.name();
+    }
+
+    /** Allowed ordering fields for admin feed pagination. */
+    private static String sanitizeAdminOrderField(String field) {
+        if ("uploadTime".equals(field)) {
+            return "uploadTime";
+        }
+        return "creationTime";
+    }
+
+    private Query baseAdminMomentsQuery(String eventId,
+            MomentStatus moderationStatusOrNull,
+            String firestoreMediaTypeOrNull,
+            String firestoreCreatorRoleOrNull) {
+        CollectionReference collection = firestore.collection(COLLECTION_NAME);
+        Query query = collection.whereEqualTo("eventId", eventId);
+        if (moderationStatusOrNull != null) {
+            query = query.whereEqualTo("status", moderationStatusStored(moderationStatusOrNull));
+        }
+        if (firestoreMediaTypeOrNull != null && !firestoreMediaTypeOrNull.isEmpty()) {
+            query = query.whereEqualTo("media.type", firestoreMediaTypeOrNull);
+        }
+        if (firestoreCreatorRoleOrNull != null && !firestoreCreatorRoleOrNull.isEmpty()) {
+            query = query.whereEqualTo("creatorRole", firestoreCreatorRoleOrNull);
+        }
+        return query;
+    }
+
+    private long aggCount(Query query) throws ExecutionException, InterruptedException {
+        AggregateQuerySnapshot snap = query.count().get().get();
+        return snap.getCount();
+    }
+
+    @Override
+    public List<Moment> getAdminMomentsFeedPage(String eventId, MomentStatus moderationStatusOrNullForAllBuckets,
+            String firestoreMediaTypeOrNull,
+            String firestoreCreatorRoleOrNull,
+            String orderField,
+            boolean ascending,
+            int limit,
+            String anchorMomentIdOrNull) throws ExecutionException, InterruptedException {
+        String field = sanitizeAdminOrderField(orderField);
+        Query.Direction dir = ascending ? Query.Direction.ASCENDING : Query.Direction.DESCENDING;
+        Query query = baseAdminMomentsQuery(eventId, moderationStatusOrNullForAllBuckets,
+                firestoreMediaTypeOrNull, firestoreCreatorRoleOrNull);
+        query = query.orderBy(field, dir).orderBy(FieldPath.documentId(), dir);
+
+        if (anchorMomentIdOrNull != null && !anchorMomentIdOrNull.isBlank()) {
+            DocumentSnapshot anchor = firestore.collection(COLLECTION_NAME)
+                    .document(anchorMomentIdOrNull.trim())
+                    .get()
+                    .get();
+            if (anchor.exists()) {
+                query = query.startAfter(anchor);
+            }
+        }
+
+        query = query.limit(Math.max(limit, 1));
+        ApiFuture<QuerySnapshot> future = query.get();
+        List<QueryDocumentSnapshot> docs = future.get().getDocuments();
+        List<Moment> moments = new ArrayList<>(docs.size());
+        for (QueryDocumentSnapshot doc : docs) {
+            moments.add(doc.toObject(Moment.class));
+        }
+        return moments;
+    }
+
+    @Override
+    public long countAdminMomentsMatching(String eventId,
+            MomentStatus moderationStatusOrNullForAllBuckets,
+            String firestoreMediaTypeOrNull,
+            String firestoreCreatorRoleOrNull) throws ExecutionException, InterruptedException {
+        Query query = baseAdminMomentsQuery(eventId,
+                moderationStatusOrNullForAllBuckets,
+                firestoreMediaTypeOrNull,
+                firestoreCreatorRoleOrNull);
+        return aggCount(query);
+    }
+
+    @Override
+    public AdminTabCounts computeAdminTabCountsNonVideo(String eventId,
+            String firestoreCreatorRoleOrNull) throws ExecutionException, InterruptedException {
+        if (eventId == null || eventId.trim().isEmpty()) {
+            return new AdminTabCounts(0L, 0L, 0L);
+        }
+        long allTotal = aggCount(baseAdminMomentsQuery(eventId, null, null, firestoreCreatorRoleOrNull));
+        long videoTotal = aggCount(baseAdminMomentsQuery(eventId, null,
+                MediaType.VIDEO.name(), firestoreCreatorRoleOrNull));
+
+        long pendingTot = aggCount(baseAdminMomentsQuery(eventId, MomentStatus.PENDING, null,
+                firestoreCreatorRoleOrNull));
+        long pendingVid = aggCount(
+                baseAdminMomentsFeedQueryWithVideo(eventId, MomentStatus.PENDING, firestoreCreatorRoleOrNull));
+
+        long approvedTot = aggCount(baseAdminMomentsQuery(eventId, MomentStatus.APPROVED, null,
+                firestoreCreatorRoleOrNull));
+        long approvedVid = aggCount(
+                baseAdminMomentsFeedQueryWithVideo(eventId, MomentStatus.APPROVED, firestoreCreatorRoleOrNull));
+
+        long allNonVideo = Math.max(0L, allTotal - videoTotal);
+        long pendNonVid = Math.max(0L, pendingTot - pendingVid);
+        long apprNonVid = Math.max(0L, approvedTot - approvedVid);
+        return new AdminTabCounts(allNonVideo, pendNonVid, apprNonVid);
+    }
+
+    /** event + optional status + VIDEO + creator role */
+    private Query baseAdminMomentsFeedQueryWithVideo(String eventId, MomentStatus st,
+            String firestoreCreatorRoleOrNull) {
+        return baseAdminMomentsQuery(eventId, st, MediaType.VIDEO.name(), firestoreCreatorRoleOrNull);
     }
 
 }

@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.moments.models.BatchDeleteMomentsRequest;
+import com.moments.models.BatchUpdateMomentStatusRequest;
 import com.moments.models.BaseResponse;
 import com.moments.models.EventStorageSummary;
 import com.moments.models.UserStorageOverview;
@@ -193,6 +195,62 @@ public class MomentController {
         } catch (ExecutionException | InterruptedException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse("Failed to get moment error: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Deletes multiple moments for one event: Firestore row, GCS originals/feed/thumbnails, and face embeddings.
+     * Caller must be an event member; each moment must belong to the given {@code eventId}.
+     */
+    /**
+     * Sets moderation status (e.g. APPROVED, REJECTED, PENDING) on multiple moments. Caller must be an event
+     * member; each moment must belong to the given {@code eventId}.
+     */
+    @PostMapping("/batch-status")
+    public ResponseEntity<BaseResponse> updateMomentsBatchStatus(@RequestBody BatchUpdateMomentStatusRequest request) {
+        try {
+            if (request == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Request body required", HttpStatus.BAD_REQUEST, null));
+            }
+            int n = momentService.updateMomentsStatusBatch(request.getEventId(), request.getUserId(),
+                    request.getMomentIds(), request.getStatus());
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Updated " + n + " moment(s)", HttpStatus.OK, n));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.FORBIDDEN, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Batch status update failed: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    @PostMapping("/batch-delete")
+    public ResponseEntity<BaseResponse> deleteMomentsBatch(@RequestBody BatchDeleteMomentsRequest request) {
+        try {
+            if (request == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Request body required", HttpStatus.BAD_REQUEST, null));
+            }
+            int deleted = momentService.deleteMomentsBatch(request.getEventId(), request.getUserId(),
+                    request.getMomentIds());
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Deleted " + deleted + " moment(s)", HttpStatus.OK, deleted));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.FORBIDDEN, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Batch delete failed: " + e.getMessage(),
                             HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }

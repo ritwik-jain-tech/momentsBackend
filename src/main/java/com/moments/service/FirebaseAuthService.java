@@ -19,6 +19,8 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 import com.moments.models.AuthSessionResponse;
+import com.moments.models.GoogleAuthResponse;
+import com.moments.models.OTPResponse;
 import com.moments.models.UserProfile;
 import com.moments.utils.IdentityUtils;
 import com.moments.utils.JwtUtil;
@@ -31,6 +33,7 @@ public class FirebaseAuthService {
 
     private final FirebaseAuth firebaseAuth;
     private final UserProfileService userProfileService;
+    private final OTPService otpService;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -40,10 +43,12 @@ public class FirebaseAuthService {
     @Autowired
     public FirebaseAuthService(FirebaseAuth firebaseAuth,
             UserProfileService userProfileService,
+            OTPService otpService,
             JwtUtil jwtUtil,
             ObjectMapper objectMapper) {
         this.firebaseAuth = firebaseAuth;
         this.userProfileService = userProfileService;
+        this.otpService = otpService;
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
     }
@@ -84,6 +89,79 @@ public class FirebaseAuthService {
 
         String jwt = jwtUtil.generateToken(profile.getUserId());
         return new AuthSessionResponse(jwt, profile);
+    }
+
+    /**
+     * Stage 1 of the Google staged sign-in. Verifies the Firebase ID token and
+     * resolves an existing profile by firebaseUid → email only (never phone, never
+     * creating one). If the email is already known the user is logged in; otherwise
+     * the client is told to collect a phone number + OTP next.
+     */
+    public GoogleAuthResponse startGoogleAuth(String idToken)
+            throws ExecutionException, InterruptedException, FirebaseAuthException {
+        if (idToken == null || idToken.isBlank()) {
+            throw new IllegalArgumentException("idToken is required");
+        }
+        FirebaseToken decoded = firebaseAuth.verifyIdToken(idToken);
+        String uid = decoded.getUid();
+        String emailLower = IdentityUtils.normalizeEmail(decoded.getEmail());
+        String name = extractName(decoded);
+
+        UserProfile existing = userProfileService.findByFirebaseUidOrEmail(uid, emailLower);
+        if (existing != null) {
+            // Backfill the firebaseUid so subsequent logins resolve instantly by uid.
+            UserProfile hydrated = userProfileService.linkGoogleIdentity(existing, uid, emailLower, name);
+            String jwt = jwtUtil.generateToken(hydrated.getUserId());
+            return GoogleAuthResponse.loggedIn(jwt, hydrated);
+        }
+        return GoogleAuthResponse.needsPhone(emailLower, name);
+    }
+
+    /**
+     * Stage 2 of the Google staged sign-in. Re-verifies the Firebase ID token (the
+     * email/uid to link are taken from it, never the client) and verifies the OTP for
+     * {@code phoneNumber}. On a valid OTP: if a profile exists for that phone, the
+     * Google email/uid are linked onto it and the user is logged in; otherwise the
+     * client is told to show the "activate free trial" form.
+     */
+    public GoogleAuthResponse linkPhoneToGoogle(String idToken, String phoneNumber, String otpCode)
+            throws Exception {
+        if (idToken == null || idToken.isBlank()) {
+            throw new IllegalArgumentException("idToken is required");
+        }
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            throw new IllegalArgumentException("phoneNumber is required");
+        }
+        FirebaseToken decoded = firebaseAuth.verifyIdToken(idToken);
+        String uid = decoded.getUid();
+        String emailLower = IdentityUtils.normalizeEmail(decoded.getEmail());
+        String name = extractName(decoded);
+
+        OTPResponse otp = otpService.verifyOtp(phoneNumber, otpCode);
+        if (otp == null || !otp.isSuccess()) {
+            return GoogleAuthResponse.otpFailed(otp != null ? otp.getMessage() : "Invalid OTP");
+        }
+
+        UserProfile profile = userProfileService.getUserProfileByPhoneNumber(phoneNumber);
+        if (profile != null) {
+            UserProfile hydrated = userProfileService.linkGoogleIdentity(profile, uid, emailLower, name);
+            String jwt = jwtUtil.generateToken(hydrated.getUserId());
+            return GoogleAuthResponse.loggedIn(jwt, hydrated);
+        }
+        return GoogleAuthResponse.needsSignup(emailLower, name,
+                IdentityUtils.normalizeTenDigitPhone(phoneNumber));
+    }
+
+    /** Best-effort display name from the standard claim then the raw {@code name} claim. */
+    private static String extractName(FirebaseToken decoded) {
+        String name = decoded.getName();
+        if (name == null || name.isBlank()) {
+            Object n = decoded.getClaims().get("name");
+            if (n != null) {
+                name = n.toString();
+            }
+        }
+        return name;
     }
 
     private static String extractPhoneFromFirebaseClaims(Map<String, Object> claims) {

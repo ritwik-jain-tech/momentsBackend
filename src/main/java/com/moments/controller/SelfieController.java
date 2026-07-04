@@ -60,7 +60,9 @@ public class SelfieController {
             // Process the selfie image and save face embedding
 
             // Upload image to cloud storage and get public URL
-            FileUploadResponse uploadResponse = googleCloudStorageService.uploadFile(imageFile, FileType.IMAGE);
+            String selfieEventId = eventId != null && !eventId.isBlank() ? eventId.trim() : null;
+            FileUploadResponse uploadResponse = googleCloudStorageService.uploadFile(imageFile, FileType.IMAGE,
+                    selfieEventId);
             String selfieUrl = uploadResponse.getPublicUrl();
 
             // Update user profile with selfie URL

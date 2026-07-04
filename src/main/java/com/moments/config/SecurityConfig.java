@@ -1,6 +1,7 @@
 package com.moments.config;
 
-import com.moments.filter.JwtAuthenticationFilter;
+import java.util.Arrays;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -15,7 +16,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
+import com.moments.filter.JwtAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -24,7 +25,10 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    /** Default false so production matches application.properties if the property is missing. */
+    /**
+     * Default false so production matches application.properties if the property is
+     * missing.
+     */
     @Value("${auth.enabled:false}")
     private boolean authEnabled;
 
@@ -32,42 +36,40 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         if (authEnabled) {
             http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(new AntPathRequestMatcher("/api/otp/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/event/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/files/**")).permitAll()
-                    // Guest app + admin: these paths are used without JWT today; permit so auth.enabled=true does not brick clients.
-                    .requestMatchers(new AntPathRequestMatcher("/api/userProfile/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/moments/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/notifications/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/api/selfie/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/moments/**")).permitAll()
-                    // Swagger UI v2
-                    .requestMatchers(new AntPathRequestMatcher("/v2/api-docs")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/swagger-resources/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/swagger-ui.html")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/webjars/**")).permitAll()
-                    // Swagger UI v3
-                    .requestMatchers(new AntPathRequestMatcher("/v3/api-docs/**")).permitAll()
-                    .requestMatchers(new AntPathRequestMatcher("/swagger-ui/**")).permitAll()
-                    // Allow OPTIONS requests for CORS preflight
-                    .requestMatchers(new AntPathRequestMatcher("/**", "OPTIONS")).permitAll()
-                    .anyRequest().authenticated()
-                )
-                .sessionManagement(session -> session
-                    .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                    .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                    .csrf(csrf -> csrf.disable())
+                    .authorizeHttpRequests(auth -> auth
+                            .requestMatchers(new AntPathRequestMatcher("/api/otp/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/api/auth/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/api/event/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/api/files/**")).permitAll()
+                            // Guest app + admin: these paths are used without JWT today; permit so
+                            // auth.enabled=true does not brick clients.
+                            .requestMatchers(new AntPathRequestMatcher("/api/userProfile/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/api/moments/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/api/notifications/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/api/selfie/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/moments/**")).permitAll()
+                            // Swagger UI v2
+                            .requestMatchers(new AntPathRequestMatcher("/v2/api-docs")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/swagger-resources/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/swagger-ui.html")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/webjars/**")).permitAll()
+                            // Swagger UI v3
+                            .requestMatchers(new AntPathRequestMatcher("/v3/api-docs/**")).permitAll()
+                            .requestMatchers(new AntPathRequestMatcher("/swagger-ui/**")).permitAll()
+                            // Allow OPTIONS requests for CORS preflight
+                            .requestMatchers(new AntPathRequestMatcher("/**", "OPTIONS")).permitAll()
+                            .anyRequest().authenticated())
+                    .sessionManagement(session -> session
+                            .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         } else {
             http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(auth -> auth
-                    .anyRequest().permitAll()
-                );
+                    .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                    .csrf(csrf -> csrf.disable())
+                    .authorizeHttpRequests(auth -> auth
+                            .anyRequest().permitAll());
         }
 
         return http.build();
@@ -78,44 +80,42 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         // Explicitly allow production domain and all other origins
         configuration.setAllowedOriginPatterns(Arrays.asList(
-            "https://studio.moments.live",
-            "https://*.github.io",
-            "http://localhost:*",
-            "https://localhost:*",
-            "http://127.0.0.1:*",
-            "https://127.0.0.1:*",
-            "*"  // Allow all other origins
+                "https://studio.moments.live",
+                "https://*.github.io",
+                "http://localhost:*",
+                "https://localhost:*",
+                "http://127.0.0.1:*",
+                "https://127.0.0.1:*",
+                "*" // Allow all other origins
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
         // Allow all headers including those needed for multipart/form-data
         // Explicitly list common headers for better browser compatibility
         configuration.setAllowedHeaders(Arrays.asList(
-            "*",
-            "Authorization", 
-            "Content-Type",
-            "Content-Length",
-            "Content-Disposition",
-            "X-Requested-With",
-            "Accept",
-            "Accept-Language",
-            "Origin",
-            "Access-Control-Request-Method",
-            "Access-Control-Request-Headers",
-            "Cache-Control",
-            "Pragma"
-        ));
+                "*",
+                "Authorization",
+                "Content-Type",
+                "Content-Length",
+                "Content-Disposition",
+                "X-Requested-With",
+                "Accept",
+                "Accept-Language",
+                "Origin",
+                "Access-Control-Request-Method",
+                "Access-Control-Request-Headers",
+                "Cache-Control",
+                "Pragma"));
         configuration.setExposedHeaders(Arrays.asList(
-            "*",
-            "Access-Control-Allow-Origin",
-            "Access-Control-Allow-Credentials",
-            "Access-Control-Expose-Headers"
-        ));
+                "*",
+                "Access-Control-Allow-Origin",
+                "Access-Control-Allow-Credentials",
+                "Access-Control-Expose-Headers"));
         // Allow credentials
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L); // 1 hour
-        
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
-} 
+}

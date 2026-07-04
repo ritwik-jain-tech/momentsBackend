@@ -3,6 +3,7 @@ package com.moments.dao;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import com.moments.models.AdminTabCounts;
 import com.moments.models.Moment;
 import com.moments.models.MomentStatus;
 import com.moments.models.ReportRequest;
@@ -68,4 +69,24 @@ public interface MomentDao {
 
     /** True if a moment document exists with this id (for idempotent Drive import). */
     boolean momentExists(String momentId) throws ExecutionException, InterruptedException;
+
+    /**
+     * Admin (web) feed: paginated moments with optional moderation / media-type / creatorRole filters,
+     * ordered by {@code orderField} (+ document id tie-break). Pass {@code anchorMomentId} to continue after that document.
+     */
+    List<Moment> getAdminMomentsFeedPage(String eventId, MomentStatus moderationStatusOrNullForAllBuckets,
+            String firestoreMediaTypeOrNull,
+            String firestoreCreatorRoleOrNull,
+            String orderField,
+            boolean ascending,
+            int limit,
+            String anchorMomentIdOrNull) throws ExecutionException, InterruptedException;
+
+    long countAdminMomentsMatching(String eventId,
+            MomentStatus moderationStatusOrNullForAllBuckets,
+            String firestoreMediaTypeOrNull,
+            String firestoreCreatorRoleOrNull) throws ExecutionException, InterruptedException;
+
+    AdminTabCounts computeAdminTabCountsNonVideo(String eventId,
+            String firestoreCreatorRoleOrNull) throws ExecutionException, InterruptedException;
 }
