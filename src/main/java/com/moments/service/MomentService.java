@@ -7,11 +7,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -330,105 +327,18 @@ public class MomentService {
         return momentDao.getAllMoments();
     }
 
-    private Moment safeGetMoment(String id) throws ExecutionException, InterruptedException {
-        try {
-            return momentDao.getMomentById(id);
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("not found")) {
-                return null;
-            }
-            throw e;
-        }
-    }
-
-    private void deleteMomentData(Moment existing, String id) throws ExecutionException, InterruptedException {
-        if (existing != null) {
-            adjustEventStorageForMoment(existing, -1);
-            googleCloudStorageService.deleteMediaObjects(existing.getMedia());
-            faceTaggingService.deleteMomentFaceEmbeddingBestEffort(id);
-        }
-        momentDao.deleteMoment(id);
-    }
-
     // Delete a Moment by ID
     public void deleteMoment(String id) throws ExecutionException, InterruptedException {
-        Moment existing = safeGetMoment(id);
-        deleteMomentData(existing, id);
-    }
-
-    /**
-     * Deletes multiple moments for one event. Caller must be a member of the event; each moment must
-     * belong to {@code eventId}. Skips IDs that do not exist (idempotent).
-     *
-     * @return number of moments removed from Firestore
-     */
-    public int deleteMomentsBatch(String eventId, String userId, List<String> momentIds)
-            throws ExecutionException, InterruptedException {
-        if (eventId == null || eventId.isBlank() || userId == null || userId.isBlank()) {
-            throw new IllegalArgumentException("eventId and userId are required");
-        }
-        if (momentIds == null || momentIds.isEmpty()) {
-            throw new IllegalArgumentException("momentIds is required");
-        }
-        assertUserMemberOfEvent(eventId, userId);
-        Set<String> unique = new LinkedHashSet<>();
-        for (String raw : momentIds) {
-            if (raw != null && !raw.isBlank()) {
-                unique.add(raw.trim());
+        try {
+            Moment existing = momentDao.getMomentById(id);
+            googleCloudStorageService.deleteMediaObjects(existing.getMedia());
+        } catch (RuntimeException e) {
+            if (e.getMessage() == null || !e.getMessage().contains("not found")) {
+                throw e;
             }
+            // Document already absent — still delete Firestore row for idempotency
         }
-        int deleted = 0;
-        for (String id : unique) {
-            Moment existing = safeGetMoment(id);
-            if (existing == null) {
-                continue;
-            }
-            if (!eventId.equals(existing.getEventId())) {
-                throw new AccessDeniedException("One or more moments do not belong to this event");
-            }
-            deleteMomentData(existing, id);
-            deleted++;
-        }
-        return deleted;
-    }
-
-    /**
-     * Sets the same moderation status on many moments. Caller must be an event member; each moment must
-     * belong to {@code eventId}. Skips IDs that do not exist (idempotent).
-     *
-     * @return number of moments updated in Firestore
-     */
-    public int updateMomentsStatusBatch(String eventId, String userId, List<String> momentIds, MomentStatus status)
-            throws ExecutionException, InterruptedException {
-        if (eventId == null || eventId.isBlank() || userId == null || userId.isBlank()) {
-            throw new IllegalArgumentException("eventId and userId are required");
-        }
-        if (momentIds == null || momentIds.isEmpty()) {
-            throw new IllegalArgumentException("momentIds is required");
-        }
-        if (status == null) {
-            throw new IllegalArgumentException("status is required");
-        }
-        assertUserMemberOfEvent(eventId, userId);
-        Set<String> unique = new LinkedHashSet<>();
-        for (String raw : momentIds) {
-            if (raw != null && !raw.isBlank()) {
-                unique.add(raw.trim());
-            }
-        }
-        int updated = 0;
-        for (String id : unique) {
-            Moment existing = safeGetMoment(id);
-            if (existing == null) {
-                continue;
-            }
-            if (!eventId.equals(existing.getEventId())) {
-                throw new AccessDeniedException("One or more moments do not belong to this event");
-            }
-            momentDao.updateMomentStatus(id, status);
-            updated++;
-        }
-        return updated;
+        momentDao.deleteMoment(id);
     }
 
     /**
@@ -592,7 +502,8 @@ public class MomentService {
             moments = momentDao.getMomentsFeedByCreatorIds(allowedCreatorIds, eventId, offset, limit);
             totalCount = momentDao.getTotalCountByCreatorIds(allowedCreatorIds, eventId);
         } else if (Objects.equals(source, "web")) {
-            return buildAdminMomentsFeedResponse(eventId, filter, cursor, userId);
+            moments = momentDao.getAllMoments(eventId, creatorRoleFilter);
+            totalCount = moments.size();
         } else if (taggedUserId != null && !taggedUserId.isEmpty()) {
             // Use tagged user filter (creatorId and taggedUserId are mutually exclusive)
             moments = momentDao.getMomentsFeedByTaggedUser(taggedUserId, eventId, offset, limit, creatorRoleFilter);
@@ -620,120 +531,6 @@ public class MomentService {
             momentsResponse.setReUploadRequired(totalCount<1);
         }
         return momentsResponse;
-    }
-
-    private MomentsResponse buildAdminMomentsFeedResponse(String eventId, MomentFilter filter, Cursor cursor,
-            String userId) throws ExecutionException, InterruptedException {
-        int limit = cursor == null ? 24 : cursor.getLimit();
-        limit = Math.min(Math.max(limit, 1), 100);
-        String anchorId = cursor == null ? null : cursor.getAnchorMomentId();
-
-        MomentStatus mod = parseAdminModerationStatus(filter);
-        String mediaType = mapAdminMediaType(filter);
-        String creatorRole = mapAdminCreatorRoleFilter(filter);
-
-        String orderField;
-        boolean ascending;
-        if ("123457".equals(eventId)) {
-            orderField = "creationTime";
-            ascending = true;
-        } else {
-            String sk = filter == null || filter.getAdminSort() == null ? "" : filter.getAdminSort().trim();
-            if ("creation-asc".equalsIgnoreCase(sk)) {
-                orderField = "creationTime";
-                ascending = true;
-            } else if ("creation-desc".equalsIgnoreCase(sk)) {
-                orderField = "creationTime";
-                ascending = false;
-            } else if ("upload-asc".equalsIgnoreCase(sk)) {
-                orderField = "uploadTime";
-                ascending = true;
-            } else {
-                // capture-time, upload-desc, default
-                orderField = "uploadTime";
-                ascending = false;
-            }
-        }
-
-        List<Moment> page = momentDao.getAdminMomentsFeedPage(eventId, mod, mediaType, creatorRole, orderField,
-                ascending, limit + 1, anchorId);
-        boolean hasMore = page.size() > limit;
-        if (hasMore) {
-            page = new ArrayList<>(page.subList(0, limit));
-        }
-
-        for (Moment moment : page) {
-            moment.setIsLiked(moment.getLikedBy() != null && moment.getLikedBy().contains(userId));
-        }
-
-        long totalMatching = momentDao.countAdminMomentsMatching(eventId, mod, mediaType, creatorRole);
-
-        Long lastTs = null;
-        String lastMomentId = null;
-        if (!page.isEmpty()) {
-            Moment last = page.get(page.size() - 1);
-            lastMomentId = last.getMomentId();
-            lastTs = "uploadTime".equals(orderField) ? last.getUploadTime() : last.getCreationTime();
-        }
-
-        Cursor cursorOut = new Cursor();
-        int totalInt = totalMatching > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) totalMatching;
-        cursorOut.setTotal(totalInt);
-        cursorOut.setOffset(0);
-        cursorOut.setLimit(limit);
-        cursorOut.setLastCreatedTime(lastTs);
-        cursorOut.setLastPage(!hasMore);
-        cursorOut.setAnchorMomentId(lastMomentId);
-
-        MomentsResponse response = new MomentsResponse(page, cursorOut);
-        if (anchorId == null || anchorId.isBlank()) {
-            response.setAdminTabCounts(momentDao.computeAdminTabCountsNonVideo(eventId, creatorRole));
-        }
-        return response;
-    }
-
-    private MomentStatus parseAdminModerationStatus(MomentFilter filter) {
-        if (filter == null || filter.getAdminModerationTab() == null || filter.getAdminModerationTab().isBlank()) {
-            return null;
-        }
-        switch (filter.getAdminModerationTab().trim().toLowerCase(Locale.ROOT)) {
-            case "pending":
-                return MomentStatus.PENDING;
-            case "approved":
-                return MomentStatus.APPROVED;
-            case "rejected":
-                return MomentStatus.REJECTED;
-            default:
-                return null;
-        }
-    }
-
-    private String mapAdminMediaType(MomentFilter filter) {
-        if (filter == null || filter.getAdminMediaBucket() == null) {
-            return null;
-        }
-        if ("videos".equalsIgnoreCase(filter.getAdminMediaBucket().trim())) {
-            return MediaType.VIDEO.name();
-        }
-        return null;
-    }
-
-    private String mapAdminCreatorRoleFilter(MomentFilter filter) {
-        if (filter == null || filter.getAdminCreatorRoleFilter() == null) {
-            return null;
-        }
-        switch (filter.getAdminCreatorRoleFilter().trim().toLowerCase(Locale.ROOT)) {
-            case "guest":
-                return "Guest";
-            case "photographer":
-                return "Photographer";
-            case "groom":
-                return "Groom";
-            case "bride":
-                return "Bride";
-            default:
-                return null;
-        }
     }
 
     private String epocToString(Long epoc) {
