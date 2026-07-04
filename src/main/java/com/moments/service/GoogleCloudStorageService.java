@@ -2,14 +2,20 @@ package com.moments.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.google.api.gax.paging.Page;
 import com.google.auth.ServiceAccountSigner;
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.auth.oauth2.GoogleCredentials;
@@ -564,6 +571,107 @@ public class GoogleCloudStorageService {
             logger.warn("Could not resolve service-account email from ComputeEngineCredentials: {}", e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * All stored objects that belong to an event, across both prefixes an event's files can live
+     * under: direct uploads ({@code events/{eventId}/}) and Google Drive imports
+     * ({@code drive-import/{eventId}/}). Folder placeholders (keys ending in {@code /}) are skipped.
+     */
+    public List<StoredObject> listEventObjects(String eventId) {
+        List<StoredObject> out = new ArrayList<>();
+        for (String prefix : eventPrefixes(eventId)) {
+            Page<Blob> page = storage.list(bucketName, Storage.BlobListOption.prefix(prefix));
+            for (Blob b : page.iterateAll()) {
+                String name = b.getName();
+                if (name == null || name.endsWith("/")) {
+                    continue;
+                }
+                long size = b.getSize() != null ? b.getSize() : 0L;
+                Long updated = b.getUpdateTime();
+                String publicURL = String.format("https://%s/%s", cdnDomain, name);
+                out.add(new StoredObject(name, size, publicURL, updated));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Streams every object belonging to {@code eventId} into a ZIP written to {@code rawOut}.
+     * Each object is copied through a bounded buffer (never fully buffered in memory), so the
+     * response size is limited only by request time, not heap. Entry names are the object path with
+     * the event prefix stripped; Drive imports are nested under {@code drive-import/}.
+     */
+    public void streamEventZip(String eventId, OutputStream rawOut) throws IOException {
+        List<StoredObject> objects = listEventObjects(eventId);
+        byte[] buf = new byte[GCS_WRITE_CHUNK_BYTES];
+        try (ZipOutputStream zip = new ZipOutputStream(rawOut)) {
+            for (StoredObject o : objects) {
+                Blob blob = storage.get(BlobId.of(bucketName, o.getName()));
+                if (blob == null || !blob.exists()) {
+                    continue;
+                }
+                zip.putNextEntry(new ZipEntry(zipEntryName(eventId, o.getName())));
+                try (ReadChannel reader = blob.reader();
+                        InputStream in = Channels.newInputStream(reader)) {
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        zip.write(buf, 0, n);
+                    }
+                }
+                zip.closeEntry();
+            }
+        }
+    }
+
+    private String[] eventPrefixes(String eventId) {
+        String e = sanitizeGcsPathSegment(eventId);
+        return new String[] { "events/" + e + "/", "drive-import/" + e + "/" };
+    }
+
+    /** Object key -> ZIP entry name: strip {@code events/{e}/}; keep Drive imports under a subfolder. */
+    private String zipEntryName(String eventId, String objectName) {
+        String e = sanitizeGcsPathSegment(eventId);
+        String uploads = "events/" + e + "/";
+        String imports = "drive-import/" + e + "/";
+        if (objectName.startsWith(uploads)) {
+            return objectName.substring(uploads.length());
+        }
+        if (objectName.startsWith(imports)) {
+            return "drive-import/" + objectName.substring(imports.length());
+        }
+        return objectName;
+    }
+
+    /** A stored object exposed by the event export/listing endpoints. */
+    public static final class StoredObject {
+        private final String name;
+        private final long sizeBytes;
+        private final String publicUrl;
+        private final Long updatedMillis;
+
+        public StoredObject(String name, long sizeBytes, String publicUrl, Long updatedMillis) {
+            this.name = name;
+            this.sizeBytes = sizeBytes;
+            this.publicUrl = publicUrl;
+            this.updatedMillis = updatedMillis;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public long getSizeBytes() {
+            return sizeBytes;
+        }
+
+        public String getPublicUrl() {
+            return publicUrl;
+        }
+
+        public Long getUpdatedMillis() {
+            return updatedMillis;
+        }
     }
 
     public String getBucketName() {
