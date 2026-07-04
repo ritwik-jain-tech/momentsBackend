@@ -25,10 +25,12 @@ import com.moments.util.Cr3PreviewExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
@@ -629,6 +631,43 @@ public class FileUploadController {
     }
 
     /**
+     * List every stored file for an event (direct uploads under {@code events/{eventId}/} and Drive
+     * imports under {@code drive-import/{eventId}/}) so the folder can be reviewed or exported.
+     */
+    @GetMapping("/events/{eventId}/files")
+    public ResponseEntity<BaseResponse> listEventFiles(@PathVariable String eventId) {
+        try {
+            if (eventId == null || eventId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("eventId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            List<GoogleCloudStorageService.StoredObject> files = storageService.listEventObjects(eventId.trim());
+            return ResponseEntity.ok(new BaseResponse("OK", HttpStatus.OK, files));
+        } catch (Exception e) {
+            logger.error("Failed to list event files for {}", eventId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to list event files: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
+     * Export an entire event folder as a streamed ZIP download. Objects are copied straight from GCS
+     * through a bounded buffer, so memory stays flat regardless of event size (large events are
+     * bounded only by the request timeout).
+     */
+    @GetMapping("/events/{eventId}/export")
+    public ResponseEntity<StreamingResponseBody> exportEventFolder(@PathVariable String eventId) {
+        String safeEvent = eventId != null ? eventId.trim() : "";
+        StreamingResponseBody body = out -> storageService.streamEventZip(safeEvent, out);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"event-" + safeEvent + ".zip\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("application/zip"))
+                .body(body);
+    }
+
+    /**
      * Import images from a publicly shared Google Drive folder or file link (recursive for folders).
      * Configure {@code google.drive.api.key} for "Anyone with the link" content, or
      * {@code google.drive.credentials.path} for private/shared-drive folders.
@@ -716,7 +755,10 @@ public class FileUploadController {
     }
 
     /**
-     * Record a finished browser/computer upload session (creates a DONE {@link UploadRecord} for the activity UI).
+     * Create or update a browser/computer upload session record for the activity UI. Called at the
+     * start of an upload (IN_PROGRESS), on pause / page-unload (PAUSED, so the session survives a
+     * refresh), and on completion (DONE / STOPPED). A body without {@code uploadRecordId}/{@code status}
+     * behaves like the legacy finalize call and creates a single DONE record.
      */
     @PostMapping("/upload-records/computer-session")
     public ResponseEntity<BaseResponse> recordComputerUploadSession(
@@ -727,16 +769,19 @@ public class FileUploadController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(new BaseResponse("userId is required", HttpStatus.BAD_REQUEST, null));
             }
-            if (body == null || body.getEventId() == null || body.getEventId().isBlank()) {
+            if (body == null) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(new BaseResponse("eventId is required", HttpStatus.BAD_REQUEST, null));
+                        .body(new BaseResponse("Request body is required", HttpStatus.BAD_REQUEST, null));
             }
-            String recordId = uploadRecordService.createCompletedComputerUpload(
+            String recordId = uploadRecordService.upsertComputerUploadSession(
                     userId.trim(),
-                    body.getEventId().trim(),
+                    body.getUploadRecordId(),
+                    body.getEventId() != null ? body.getEventId().trim() : null,
                     body.getCreatorName(),
+                    body.getTotalCount(),
                     body.getUploadedCount(),
-                    body.getFailedCount());
+                    body.getFailedCount(),
+                    body.getStatus());
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("uploadRecordId", recordId);
             return ResponseEntity.ok(new BaseResponse("Upload session recorded.", HttpStatus.OK, data));

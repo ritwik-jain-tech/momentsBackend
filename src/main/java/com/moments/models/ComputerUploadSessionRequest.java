@@ -10,6 +10,37 @@ public class ComputerUploadSessionRequest {
     private int failedCount;
     private String creatorName;
 
+    /** When present, update this existing live session record instead of creating a new one. */
+    private String uploadRecordId;
+    /** Total files in the session (lets a live/paused record show progress out of the full set). */
+    private int totalCount;
+    /** Desired lifecycle state; null defaults to DONE for legacy finalize-only callers. */
+    private String status;
+
+    public String getUploadRecordId() {
+        return uploadRecordId;
+    }
+
+    public void setUploadRecordId(String uploadRecordId) {
+        this.uploadRecordId = uploadRecordId;
+    }
+
+    public int getTotalCount() {
+        return totalCount;
+    }
+
+    public void setTotalCount(int totalCount) {
+        this.totalCount = totalCount;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
     public String getEventId() {
         return eventId;
     }

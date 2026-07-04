@@ -14,6 +14,8 @@ public class UploadRecord {
     public static final String STATUS_DONE = "DONE";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_PAUSED = "PAUSED";
+    /** User stopped a computer upload session early (partial, not resumable server-side). */
+    public static final String STATUS_STOPPED = "STOPPED";
 
     /** Import from Google Drive (async job). */
     public static final String SOURCE_GOOGLE_DRIVE = "GOOGLE_DRIVE";

@@ -41,26 +41,66 @@ public class UploadRecordService {
         return id;
     }
 
+    private static final int MAX_SESSION_FILES = 5000;
+
     /**
-     * Persists a finished “upload from computer” session for the admin activity feed (immediate DONE).
+     * Create or update a "upload from computer" session record so the admin activity feed reflects the
+     * live session (IN_PROGRESS), a pause that survives a browser refresh (PAUSED), or the finished
+     * result (DONE / STOPPED / FAILED).
+     *
+     * <p>When {@code recordId} is provided the matching (user-owned) record is merged in place; otherwise
+     * a new record is created. A null/blank {@code status} defaults to DONE so legacy finalize-only
+     * callers keep their previous behaviour.</p>
+     *
+     * @return the record id (existing when updating, freshly minted when creating)
      */
-    public String createCompletedComputerUpload(String userId, String eventId, String creatorName,
-            int uploadedCount, int failedCount) throws ExecutionException, InterruptedException {
+    public String upsertComputerUploadSession(String userId, String recordId, String eventId,
+            String creatorName, int totalCount, int uploadedCount, int failedCount, String status)
+            throws ExecutionException, InterruptedException {
         if (userId == null || userId.isBlank()) {
             throw new IllegalArgumentException("userId is required");
-        }
-        if (eventId == null || eventId.isBlank()) {
-            throw new IllegalArgumentException("eventId is required");
         }
         if (uploadedCount < 0 || failedCount < 0) {
             throw new IllegalArgumentException("Counts must be non-negative");
         }
-        int total = uploadedCount + failedCount;
+        String resolvedStatus = normalizeComputerStatus(status);
+        int total = totalCount > 0 ? totalCount : (uploadedCount + failedCount);
+        if (total > MAX_SESSION_FILES) {
+            throw new IllegalArgumentException("Too many files in one session (max " + MAX_SESSION_FILES + ")");
+        }
+
+        // Update an existing live/paused record in place (keeps a single row across the whole session).
+        if (recordId != null && !recordId.isBlank()) {
+            UploadRecord existing = uploadRecordDao.getById(recordId.trim());
+            if (existing == null) {
+                throw new IllegalArgumentException("Upload record not found");
+            }
+            if (!userId.trim().equals(existing.getUserId())) {
+                throw new IllegalArgumentException("Not allowed to modify this upload");
+            }
+            Map<String, Object> m = new HashMap<>();
+            m.put("progress", uploadedCount);
+            m.put("failedCount", failedCount);
+            if (totalCount > 0) {
+                m.put("totalCount", total);
+            }
+            m.put("status", resolvedStatus);
+            m.put("pauseRequested", Boolean.FALSE);
+            if (creatorName != null && !creatorName.isBlank()) {
+                m.put("creatorName", creatorName.trim());
+            }
+            uploadRecordDao.mergeFields(existing.getUploadRecordId(), m);
+            log.info("UploadRecord {} COMPUTER session {} progress={}/{} fail={}",
+                    existing.getUploadRecordId(), resolvedStatus, uploadedCount, total, failedCount);
+            return existing.getUploadRecordId();
+        }
+
+        // No id yet: create the session record (start of upload, or a legacy one-shot finalize).
+        if (eventId == null || eventId.isBlank()) {
+            throw new IllegalArgumentException("eventId is required");
+        }
         if (total <= 0) {
             throw new IllegalArgumentException("At least one file must be accounted for");
-        }
-        if (total > 500) {
-            throw new IllegalArgumentException("Too many files in one session (max 500)");
         }
         UploadRecord r = new UploadRecord();
         r.setUserId(userId.trim());
@@ -71,13 +111,34 @@ public class UploadRecordService {
         r.setTotalCount(total);
         r.setProgress(uploadedCount);
         r.setFailedCount(failedCount);
-        r.setStatus(UploadRecord.STATUS_DONE);
+        r.setStatus(resolvedStatus);
         r.setErrorMessage(null);
         r.setPauseRequested(Boolean.FALSE);
         String id = uploadRecordDao.create(r);
-        log.info("UploadRecord {} COMPUTER session DONE user={} event={} ok={} fail={}",
-                id, userId, eventId, uploadedCount, failedCount);
+        log.info("UploadRecord {} COMPUTER session created {} user={} event={} ok={} fail={} total={}",
+                id, resolvedStatus, userId, eventId, uploadedCount, failedCount, total);
         return id;
+    }
+
+    /** Only the states a computer session can legitimately be in; unknown/blank falls back to DONE. */
+    private static String normalizeComputerStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return UploadRecord.STATUS_DONE;
+        }
+        switch (status.trim().toUpperCase()) {
+            case UploadRecord.STATUS_STARTED:
+            case UploadRecord.STATUS_IN_PROGRESS:
+                return UploadRecord.STATUS_IN_PROGRESS;
+            case UploadRecord.STATUS_PAUSED:
+                return UploadRecord.STATUS_PAUSED;
+            case UploadRecord.STATUS_STOPPED:
+                return UploadRecord.STATUS_STOPPED;
+            case UploadRecord.STATUS_FAILED:
+                return UploadRecord.STATUS_FAILED;
+            case UploadRecord.STATUS_DONE:
+            default:
+                return UploadRecord.STATUS_DONE;
+        }
     }
 
     public void afterDriveListing(String recordId, int totalImageCount) throws ExecutionException, InterruptedException {
