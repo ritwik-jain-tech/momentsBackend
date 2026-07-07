@@ -238,6 +238,24 @@ public class UploadRecordService {
     }
 
     /**
+     * Cancel a not-yet-finished upload record (marks it STOPPED). Used by the Uploads tab's
+     * per-row Cancel action for both Drive imports and computer sessions. A completed (DONE)
+     * record can't be cancelled.
+     */
+    public void cancel(String recordId, String actingUserId) throws ExecutionException, InterruptedException {
+        UploadRecord r = requireOwnedRecord(recordId, actingUserId);
+        if (UploadRecord.STATUS_DONE.equals(r.getStatus())) {
+            throw new IllegalStateException("A completed upload can't be cancelled.");
+        }
+        Map<String, Object> m = new HashMap<>();
+        m.put("status", UploadRecord.STATUS_STOPPED);
+        m.put("pauseRequested", Boolean.FALSE);
+        m.put("errorMessage", null);
+        uploadRecordDao.mergeFields(r.getUploadRecordId(), m);
+        log.info("UploadRecord {} cancelled (STOPPED) by user", r.getUploadRecordId());
+    }
+
+    /**
      * Validates ownership and status before retrigger. Call {@link #commitRetriggerAndBuildRequest} only after
      * the Drive link is confirmed accessible.
      */

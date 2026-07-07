@@ -823,6 +823,33 @@ public class FileUploadController {
     }
 
     /**
+     * Cancel a not-yet-finished upload record (marks it STOPPED). Works for Drive imports and
+     * computer sessions; a completed record can't be cancelled.
+     */
+    @PostMapping("/upload-records/{recordId}/cancel")
+    public ResponseEntity<BaseResponse> cancelUploadRecord(@PathVariable String recordId,
+            @RequestParam("userId") String userId) {
+        try {
+            if (recordId == null || recordId.isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("recordId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            uploadRecordService.cancel(recordId, userId);
+            return ResponseEntity.ok(new BaseResponse("Upload cancelled.", HttpStatus.OK, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.CONFLICT, null));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to cancel upload: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /**
      * Resume / retry a Drive import using the same record (idempotent for already-imported files).
      */
     @PostMapping("/upload-records/{recordId}/retrigger")
