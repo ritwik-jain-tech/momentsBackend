@@ -380,17 +380,18 @@ public class FileUploadController {
 
             List<Moment> momentsToCreate = new ArrayList<>();
             List<BulkUploadResponse.FileUploadError> failedFiles = new ArrayList<>();
+            int duplicateCount = 0;
 
             // Process files in batches of 5 to manage memory and avoid overwhelming the system
             for (int i = 0; i < files.length; i += BATCH_SIZE) {
                 int endIndex = Math.min(i + BATCH_SIZE, files.length);
-                
+
                 // Process current batch
                 for (int j = i; j < endIndex; j++) {
                     MultipartFile file = files[j];
                     Moment moment = moments.get(j);
                     String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "unknown";
-                    
+
                     try {
                         if (file.isEmpty()) {
                             failedFiles.add(new BulkUploadResponse.FileUploadError(
@@ -404,22 +405,30 @@ public class FileUploadController {
                             fileType = moment.getMedia().getType() == MediaType.VIDEO ? FileType.VIDEO : FileType.IMAGE;
                         }
 
-                        // Upload the file and get its public URL (scoped under events/{eventId}/)
                         String uploadEventId = moment.getEventId() != null ? moment.getEventId().trim() : null;
-                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType, uploadEventId);
-                        
-                        // Update the moment's media URL with the uploaded URL
-                        moment.getMedia().setUrl(fileUploadResponse.getPublicUrl());
 
-                        // Idempotency: derive a stable moment id from the (deterministic) GCS object
-                        // key so re-uploading the same file to the same event doesn't create a
-                        // duplicate moment. Only set it when the client didn't provide one.
+                        // Duplicate short-circuit BEFORE re-uploading bytes: the deterministic moment
+                        // id is derived from the (stable) object key, so a file already uploaded to
+                        // this event is detected here and its bytes are never re-sent to GCS.
                         if (moment.getMomentId() == null || moment.getMomentId().isBlank()) {
-                            String detId = momentService.deterministicUploadMomentId(fileUploadResponse.getFileName());
+                            String objectKey = GoogleCloudStorageService.gcsObjectKey(
+                                    uploadEventId, file.getOriginalFilename());
+                            String detId = momentService.deterministicUploadMomentId(objectKey);
                             if (detId != null) {
                                 moment.setMomentId(detId);
                             }
                         }
+                        if (moment.getMomentId() != null && !moment.getMomentId().isBlank()
+                                && momentService.momentExists(moment.getMomentId())) {
+                            duplicateCount++;
+                            continue;
+                        }
+
+                        // Upload the file and get its public URL (scoped under events/{eventId}/)
+                        FileUploadResponse fileUploadResponse = storageService.uploadFile(file, fileType, uploadEventId);
+
+                        // Update the moment's media URL with the uploaded URL
+                        moment.getMedia().setUrl(fileUploadResponse.getPublicUrl());
 
                         // CR3 is not browser-renderable; store its embedded JPEG preview as feedUrl
                         // (skipped when the client already supplied a feedUrl preview).
@@ -430,12 +439,12 @@ public class FileUploadController {
                                 : new MomentMemoryUsage();
                         usage.setOriginalUploadSizeBytes(file.getSize());
                         moment.setMemoryUsage(usage);
-                        
+
                         // Ensure media type is set correctly
                         if (moment.getMedia().getType() == null) {
                             moment.getMedia().setType( MediaType.IMAGE);
                         }
-                        
+
                         momentsToCreate.add(moment);
                     } catch (Exception e) {
                         failedFiles.add(new BulkUploadResponse.FileUploadError(
@@ -451,7 +460,7 @@ public class FileUploadController {
                     createdMomentIds = momentService.saveMoments(momentsToCreate, false);
                 } catch (ExecutionException | InterruptedException e) {
                     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body(new BaseResponse("Failed to create moments: " + e.getMessage(), 
+                            .body(new BaseResponse("Failed to create moments: " + e.getMessage(),
                                     HttpStatus.INTERNAL_SERVER_ERROR, null));
                 }
             }
@@ -464,13 +473,16 @@ public class FileUploadController {
                     null, // successfulFiles - not needed for this endpoint
                     failedFiles
             );
+            bulkResponse.setDuplicateCount(duplicateCount);
 
-            HttpStatus status = failedFiles.isEmpty() ? HttpStatus.OK : 
-                               (createdMomentIds.isEmpty() ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.PARTIAL_CONTENT);
-            
-            String message = failedFiles.isEmpty() ? 
-                    String.format("Successfully uploaded %d files and created %d moments", files.length, createdMomentIds.size()) : 
-                    String.format("Uploaded %d of %d files and created %d moments", createdMomentIds.size(), files.length, createdMomentIds.size());
+            HttpStatus status = failedFiles.isEmpty() ? HttpStatus.OK :
+                               ((createdMomentIds.isEmpty() && duplicateCount == 0)
+                                       ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.PARTIAL_CONTENT);
+
+            String dupNote = duplicateCount > 0 ? String.format(" (%d duplicate(s) skipped)", duplicateCount) : "";
+            String message = failedFiles.isEmpty() ?
+                    String.format("Successfully uploaded %d files and created %d moments%s", files.length, createdMomentIds.size(), dupNote) :
+                    String.format("Uploaded %d of %d files and created %d moments%s", createdMomentIds.size(), files.length, createdMomentIds.size(), dupNote);
 
             BaseResponse response = new BaseResponse(message, status, bulkResponse);
             return ResponseEntity.status(status).body(response);
@@ -544,6 +556,7 @@ public class FileUploadController {
 
             List<Moment> momentsToCreate = new ArrayList<>();
             List<BulkUploadResponse.FileUploadError> failed = new ArrayList<>();
+            int duplicateCount = 0;
 
             for (int i = 0; i < moments.size(); i++) {
                 Moment moment = moments.get(i);
@@ -570,6 +583,24 @@ public class FileUploadController {
                         continue;
                     }
 
+                    // Deterministic id from the object key: the same source file always maps to the
+                    // same moment id, so re-selecting a folder that was already uploaded is a no-op.
+                    if (moment.getMomentId() == null || moment.getMomentId().isBlank()) {
+                        String detId = momentService.deterministicUploadMomentId(objectName);
+                        if (detId != null) {
+                            moment.setMomentId(detId);
+                        }
+                    }
+
+                    // Duplicate short-circuit: if a moment for this file already exists, skip all
+                    // further work (no GCS head read, no CR3 preview, no create). Counted as a
+                    // duplicate, not a failure, so the overall upload still reports success.
+                    if (moment.getMomentId() != null && !moment.getMomentId().isBlank()
+                            && momentService.momentExists(moment.getMomentId())) {
+                        duplicateCount++;
+                        continue;
+                    }
+
                     // Read object head from GCS for size + CR3 preview; verifies the object exists.
                     ExistingImageBlobHead head = storageService.readImageBlobHead(
                             objectName, Cr3PreviewExtractor.DEFAULT_SCAN_LIMIT_BYTES);
@@ -587,13 +618,6 @@ public class FileUploadController {
 
                     if (moment.getMedia().getType() == null) {
                         moment.getMedia().setType(MediaType.IMAGE);
-                    }
-
-                    if (moment.getMomentId() == null || moment.getMomentId().isBlank()) {
-                        String detId = momentService.deterministicUploadMomentId(objectName);
-                        if (detId != null) {
-                            moment.setMomentId(detId);
-                        }
                     }
 
                     attachCr3PreviewFromGcs(moment, objectName, head, moment.getEventId().trim());
@@ -617,11 +641,14 @@ public class FileUploadController {
 
             BulkUploadResponse bulkResponse = new BulkUploadResponse(
                     moments.size(), createdMomentIds.size(), failed.size(), null, failed);
+            bulkResponse.setDuplicateCount(duplicateCount);
             HttpStatus status = failed.isEmpty() ? HttpStatus.OK
-                    : (createdMomentIds.isEmpty() ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.PARTIAL_CONTENT);
+                    : ((createdMomentIds.isEmpty() && duplicateCount == 0)
+                            ? HttpStatus.INTERNAL_SERVER_ERROR : HttpStatus.PARTIAL_CONTENT);
+            String dupNote = duplicateCount > 0 ? String.format(" (%d duplicate(s) skipped)", duplicateCount) : "";
             String message = failed.isEmpty()
-                    ? String.format("Created %d moment(s)", createdMomentIds.size())
-                    : String.format("Created %d of %d moment(s)", createdMomentIds.size(), moments.size());
+                    ? String.format("Created %d moment(s)%s", createdMomentIds.size(), dupNote)
+                    : String.format("Created %d of %d moment(s)%s", createdMomentIds.size(), moments.size(), dupNote);
             return ResponseEntity.status(status).body(new BaseResponse(message, status, bulkResponse));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

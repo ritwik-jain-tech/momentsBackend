@@ -6,6 +6,8 @@ public class BulkUploadResponse {
     private int totalFiles;
     private int successfulUploads;
     private int failedUploads;
+    /** Files skipped because a moment for the same source file already existed (not a failure). */
+    private int duplicateCount;
     private List<FileUploadResponse> successfulFiles;
     private List<FileUploadError> failedFiles;
 
@@ -16,6 +18,14 @@ public class BulkUploadResponse {
         this.failedUploads = failedUploads;
         this.successfulFiles = successfulFiles;
         this.failedFiles = failedFiles;
+    }
+
+    public int getDuplicateCount() {
+        return duplicateCount;
+    }
+
+    public void setDuplicateCount(int duplicateCount) {
+        this.duplicateCount = duplicateCount;
     }
 
     public int getTotalFiles() {
