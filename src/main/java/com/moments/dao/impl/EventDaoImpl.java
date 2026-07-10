@@ -181,6 +181,20 @@ public class EventDaoImpl implements EventDao {
     }
 
     @Override
+    public Event getEventByReviewToken(String reviewToken) throws ExecutionException, InterruptedException {
+        if (reviewToken == null || reviewToken.isBlank()) {
+            return null;
+        }
+        List<QueryDocumentSnapshot> docs = firestore.collection(COLLECTION_NAME)
+                .whereEqualTo("reviewToken", reviewToken)
+                .limit(1)
+                .get()
+                .get()
+                .getDocuments();
+        return docs.isEmpty() ? null : docs.get(0).toObject(Event.class);
+    }
+
+    @Override
     public List<String> findEventIdsWhereUserIsMember(String userId) throws ExecutionException, InterruptedException {
         if (userId == null || userId.isBlank()) {
             return new ArrayList<>();

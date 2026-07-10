@@ -441,6 +441,73 @@ public class MomentService {
         return updated;
     }
 
+    // ---- Delivery: client review + album ----------------------------------------------------
+
+    private Event requireEventByReviewToken(String reviewToken) throws ExecutionException, InterruptedException {
+        if (reviewToken == null || reviewToken.isBlank()) {
+            throw new IllegalArgumentException("reviewToken is required");
+        }
+        Event event = eventDao.getEventByReviewToken(reviewToken);
+        if (event == null) {
+            throw new IllegalArgumentException("Invalid review token");
+        }
+        return event;
+    }
+
+    /** Public review feed: photographer-approved moments for the token's event (paged). */
+    public MomentsResponse getReviewFeed(String reviewToken, Cursor cursor)
+            throws ExecutionException, InterruptedException {
+        Event event = requireEventByReviewToken(reviewToken);
+        return findMoments(event.getEventId(), null, cursor, null);
+    }
+
+    /**
+     * Applies a client (bride/groom) selection to moments via the public review token. Each moment must
+     * belong to the token's event and be photographer-{@code APPROVED}. Returns the number updated.
+     */
+    public int applyClientSelection(String reviewToken, List<String> momentIds, ClientSelection selection)
+            throws ExecutionException, InterruptedException {
+        if (momentIds == null || momentIds.isEmpty()) {
+            throw new IllegalArgumentException("momentIds is required");
+        }
+        if (selection == null) {
+            throw new IllegalArgumentException("selection is required");
+        }
+        Event event = requireEventByReviewToken(reviewToken);
+        String eventId = event.getEventId();
+        Set<String> unique = new LinkedHashSet<>();
+        for (String raw : momentIds) {
+            if (raw != null && !raw.isBlank()) {
+                unique.add(raw.trim());
+            }
+        }
+        int updated = 0;
+        for (String id : unique) {
+            Moment existing = safeGetMoment(id);
+            if (existing == null) {
+                continue;
+            }
+            if (!eventId.equals(existing.getEventId())) {
+                throw new AccessDeniedException("One or more moments do not belong to this event");
+            }
+            if (existing.getStatus() != MomentStatus.APPROVED) {
+                continue; // only approved moments are part of the client review
+            }
+            momentDao.updateClientSelection(id, selection);
+            updated++;
+        }
+        return updated;
+    }
+
+    /** Public album feed: client-selected moments in chronological order. Empty until album finalized. */
+    public List<Moment> getAlbumMoments(String reviewToken) throws ExecutionException, InterruptedException {
+        Event event = requireEventByReviewToken(reviewToken);
+        if (!event.isAlbumFinalized()) {
+            return new ArrayList<>();
+        }
+        return momentDao.getSelectedMomentsForAlbum(event.getEventId());
+    }
+
     /**
      * Returns storage for one event. User must be a member ({@code userIds} contains {@code userId}).
      * Prefers {@link Event#getAggregatedStorage()}; falls back to summing moments if unset.

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import com.moments.models.AdminTabCounts;
+import com.moments.models.ClientSelection;
 import com.moments.models.Moment;
 import com.moments.models.MomentStatus;
 import com.moments.models.ReportRequest;
@@ -46,6 +47,12 @@ public interface MomentDao {
     boolean reportMoment(ReportRequest request) throws ExecutionException, InterruptedException;
 
     String updateMomentStatus(String momentId, MomentStatus status) throws ExecutionException, InterruptedException;
+
+    /** Sets the client (bride/groom) delivery-review selection on a single moment. */
+    String updateClientSelection(String momentId, ClientSelection selection) throws ExecutionException, InterruptedException;
+
+    /** Moments the client marked {@code SELECTED}, chronological ascending — the finalized album order. */
+    List<Moment> getSelectedMomentsForAlbum(String eventId) throws ExecutionException, InterruptedException;
 
     List<Moment> getMomentsByIds(List<String> momentIds) throws ExecutionException, InterruptedException;
 

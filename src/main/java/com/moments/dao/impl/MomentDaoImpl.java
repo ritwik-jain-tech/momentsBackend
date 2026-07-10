@@ -23,6 +23,7 @@ import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.firestore.WriteResult;
 import com.moments.dao.MomentDao;
 import com.moments.models.AdminTabCounts;
+import com.moments.models.ClientSelection;
 import com.moments.models.MediaType;
 import com.moments.models.Moment;
 import com.moments.models.MomentStatus;
@@ -319,6 +320,41 @@ public class MomentDaoImpl implements MomentDao {
         updates.put("updated_at", FieldValue.serverTimestamp());
         docRef.update(updates).get();
         return momentId;
+    }
+
+    @Override
+    public String updateClientSelection(String momentId, ClientSelection selection)
+            throws ExecutionException, InterruptedException {
+        DocumentReference docRef = firestore.collection(COLLECTION_NAME).document(momentId);
+        DocumentSnapshot document = docRef.get().get();
+
+        if (!document.exists()) {
+            throw new RuntimeException("Moment not found with ID: " + momentId);
+        }
+        Map<String, Object> updates = new HashMap<>();
+        updates.put("client_selection", selection == null ? null : selection.name());
+        updates.put("updated_at", FieldValue.serverTimestamp());
+        docRef.update(updates).get();
+        return momentId;
+    }
+
+    @Override
+    public List<Moment> getSelectedMomentsForAlbum(String eventId) throws ExecutionException, InterruptedException {
+        List<Moment> moments = new ArrayList<>();
+        if (eventId == null || eventId.isBlank()) {
+            return moments;
+        }
+        List<QueryDocumentSnapshot> documents = firestore.collection(COLLECTION_NAME)
+                .whereEqualTo("eventId", eventId)
+                .whereEqualTo("client_selection", ClientSelection.SELECTED.name())
+                .orderBy("creationTime", Query.Direction.ASCENDING)
+                .get()
+                .get()
+                .getDocuments();
+        for (QueryDocumentSnapshot document : documents) {
+            moments.add(document.toObject(Moment.class));
+        }
+        return moments;
     }
 
     @Override

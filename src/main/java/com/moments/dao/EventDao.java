@@ -32,6 +32,9 @@ public interface EventDao {
      */
     List<String> findEventIdsWhereUserIsMember(String userId) throws ExecutionException, InterruptedException;
 
+    /** Resolves an event by its opaque {@code reviewToken} (public review/album pages). Null if none matches. */
+    Event getEventByReviewToken(String reviewToken) throws ExecutionException, InterruptedException;
+
     void deleteUserForEvents(String userId, List<String> eventIds) throws ExecutionException, InterruptedException;
 
     /**
