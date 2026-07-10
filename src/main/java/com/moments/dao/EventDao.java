@@ -40,5 +40,13 @@ public interface EventDao {
      */
     void adjustAggregatedStorage(String eventId, long deltaOriginal, long deltaOptimised, long deltaThumbnail)
             throws ExecutionException, InterruptedException;
+
+    /**
+     * Atomically adjusts {@link com.moments.models.Event#getTotalMoments()} using a Firestore increment.
+     * Positive on create, negative on delete. Keeps the storage overview's per-project moment count
+     * accurate without reading every moment document.
+     */
+    void incrementTotalMoments(String eventId, long delta)
+            throws ExecutionException, InterruptedException;
 }
 

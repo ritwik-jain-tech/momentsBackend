@@ -240,6 +240,16 @@ public class EventDaoImpl implements EventDao {
         ref.update(updates).get();
     }
 
+    @Override
+    public void incrementTotalMoments(String eventId, long delta)
+            throws ExecutionException, InterruptedException {
+        if (eventId == null || eventId.isBlank() || delta == 0L) {
+            return;
+        }
+        DocumentReference ref = firestore.collection(COLLECTION_NAME).document(eventId);
+        ref.update("totalMoments", FieldValue.increment(delta)).get();
+    }
+
 
     public List<Event> getEventsByTimeRange(Long startTime, Long endTime) throws ExecutionException, InterruptedException {
         CollectionReference collection = firestore.collection(COLLECTION_NAME);

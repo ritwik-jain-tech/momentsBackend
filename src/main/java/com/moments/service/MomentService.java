@@ -99,6 +99,7 @@ public class MomentService {
         logger.info("Successfully saved moment {} to database, triggering face tagging", momentId);
 
         adjustEventStorageForMoment(moment, 1);
+        bumpEventMomentCounts(Collections.singletonList(moment), 1);
 
         // Trigger face tagging service call (async with fail safety) - non-blocking
         faceTaggingService.processMomentsBatchAsync(Collections.singletonList(moment));
@@ -197,6 +198,13 @@ public class MomentService {
         // Use batch operation for atomicity
         List<String> results = momentDao.saveMomentsBatch(validMoments);
 
+        // Roll each new moment's original upload size into the event aggregate (and bump the moment
+        // count) so the storage overview reflects fresh uploads. The >=50 path does the same per batch.
+        for (Moment m : validMoments) {
+            adjustEventStorageForMoment(m, 1);
+        }
+        bumpEventMomentCounts(validMoments, 1);
+
         logger.info("Successfully saved {} moments to database, triggering face tagging", results.size());
 
         triggerFaceTaggingAfterSave(new ArrayList<>(validMoments), synchronousFaceTagging);
@@ -262,6 +270,7 @@ public class MomentService {
                 for (Moment m : batch) {
                     adjustEventStorageForMoment(m, 1);
                 }
+                bumpEventMomentCounts(batch, 1);
 
                 // Trigger face tagging for this batch with robust retry mechanism
                 // Create a copy for async processing to avoid any potential issues
@@ -344,6 +353,7 @@ public class MomentService {
     private void deleteMomentData(Moment existing, String id) throws ExecutionException, InterruptedException {
         if (existing != null) {
             adjustEventStorageForMoment(existing, -1);
+            bumpEventMomentCounts(java.util.Collections.singletonList(existing), -1);
             googleCloudStorageService.deleteMediaObjects(existing.getMedia());
             faceTaggingService.deleteMomentFaceEmbeddingBestEffort(id);
         }
@@ -485,6 +495,30 @@ public class MomentService {
 
     private static long nz(Long v) {
         return v == null ? 0L : v;
+    }
+
+    /**
+     * Adjusts each affected event's {@code totalMoments} counter by {@code sign} per moment, so the
+     * storage overview's per-project count stays accurate without reading every moment document.
+     */
+    private void bumpEventMomentCounts(List<Moment> moments, int sign) {
+        if (moments == null || moments.isEmpty()) {
+            return;
+        }
+        java.util.Map<String, Long> deltas = new java.util.HashMap<>();
+        for (Moment m : moments) {
+            if (m == null || m.getEventId() == null || m.getEventId().isBlank()) {
+                continue;
+            }
+            deltas.merge(m.getEventId(), (long) sign, Long::sum);
+        }
+        deltas.forEach((eventId, delta) -> {
+            try {
+                eventDao.incrementTotalMoments(eventId, delta);
+            } catch (Exception e) {
+                logger.warn("incrementTotalMoments failed for event {}: {}", eventId, e.getMessage());
+            }
+        });
     }
 
     private void adjustEventStorageForMoment(Moment moment, int sign) {
