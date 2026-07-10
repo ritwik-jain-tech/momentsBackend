@@ -21,9 +21,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.moments.models.BatchClientSelectionRequest;
 import com.moments.models.BatchDeleteMomentsRequest;
 import com.moments.models.BatchUpdateMomentStatusRequest;
 import com.moments.models.BaseResponse;
+import com.moments.models.ClientSelectionRequest;
+import com.moments.models.Cursor;
 import com.moments.models.EventStorageSummary;
 import com.moments.models.UserStorageOverview;
 import com.moments.models.LikeRequest;
@@ -282,6 +285,93 @@ public class MomentController {
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        }
+    }
+
+    // ---- Delivery: public client review + album (token-scoped, no login) --------------------
+
+    /** Public review feed: photographer-approved moments for a review token, paginated. */
+    @GetMapping("/review/{reviewToken}")
+    public ResponseEntity<BaseResponse> getReviewFeed(@PathVariable String reviewToken,
+            @RequestParam(value = "offset", defaultValue = "0") int offset,
+            @RequestParam(value = "limit", defaultValue = "60") int limit) {
+        try {
+            Cursor cursor = new Cursor(0, offset, limit, null, false);
+            MomentsResponse response = momentService.getReviewFeed(reviewToken, cursor);
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, response));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to load review feed: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Public: set one moment's client selection via review token. */
+    @PostMapping("/client-selection")
+    public ResponseEntity<BaseResponse> setClientSelection(@RequestBody ClientSelectionRequest request) {
+        try {
+            if (request == null || request.getMomentId() == null || request.getMomentId().isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("momentId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            int n = momentService.applyClientSelection(request.getReviewToken(),
+                    java.util.List.of(request.getMomentId()), request.getSelection());
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Updated " + n + " moment(s)", HttpStatus.OK, n));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.FORBIDDEN, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to set client selection: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Public: set the same client selection on many moments via review token. */
+    @PostMapping("/client-selection/batch")
+    public ResponseEntity<BaseResponse> setClientSelectionBatch(@RequestBody BatchClientSelectionRequest request) {
+        try {
+            if (request == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("Request body required", HttpStatus.BAD_REQUEST, null));
+            }
+            int n = momentService.applyClientSelection(request.getReviewToken(),
+                    request.getMomentIds(), request.getSelection());
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Updated " + n + " moment(s)", HttpStatus.OK, n));
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.FORBIDDEN, null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.BAD_REQUEST, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to set client selection: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Public album feed: client-selected moments, chronological. Empty until album finalized. */
+    @GetMapping("/album/{reviewToken}")
+    public ResponseEntity<BaseResponse> getAlbumMoments(@PathVariable String reviewToken) {
+        try {
+            List<Moment> moments = momentService.getAlbumMoments(reviewToken);
+            return ResponseEntity.status(HttpStatus.OK).body(new BaseResponse("Success", HttpStatus.OK, moments));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        } catch (ExecutionException | InterruptedException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse("Failed to load album: " + e.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
     }
 

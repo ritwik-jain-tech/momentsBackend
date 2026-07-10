@@ -33,6 +33,16 @@ public class Event {
     /** Cumulative bytes for all moments in this event (maintained on create/delete/face-tagging updates). */
     private MomentMemoryUsage aggregatedStorage;
 
+    /** Opaque, shareable token for the public client review/album pages (no login). Null until exported. */
+    private String reviewToken;
+    /** True once the photographer has exported approved moments to the client review page. */
+    private boolean reviewEnabled;
+    /** True once the client has finalized their album selection. Gates the public album page. */
+    private boolean albumFinalized;
+    /** Epoch millis when review was exported / album finalized (informational). */
+    private Long reviewExportedAt;
+    private Long albumFinalizedAt;
+
     /**
      * Optional millis from client; applied to {@link #startTime} before persist and not stored in Firestore.
      */
@@ -48,6 +58,46 @@ public class Event {
     private Long endTimeEpoch;
 
     // Getters and Setters
+
+    public String getReviewToken() {
+        return reviewToken;
+    }
+
+    public void setReviewToken(String reviewToken) {
+        this.reviewToken = reviewToken;
+    }
+
+    public boolean isReviewEnabled() {
+        return reviewEnabled;
+    }
+
+    public void setReviewEnabled(boolean reviewEnabled) {
+        this.reviewEnabled = reviewEnabled;
+    }
+
+    public boolean isAlbumFinalized() {
+        return albumFinalized;
+    }
+
+    public void setAlbumFinalized(boolean albumFinalized) {
+        this.albumFinalized = albumFinalized;
+    }
+
+    public Long getReviewExportedAt() {
+        return reviewExportedAt;
+    }
+
+    public void setReviewExportedAt(Long reviewExportedAt) {
+        this.reviewExportedAt = reviewExportedAt;
+    }
+
+    public Long getAlbumFinalizedAt() {
+        return albumFinalizedAt;
+    }
+
+    public void setAlbumFinalizedAt(Long albumFinalizedAt) {
+        this.albumFinalizedAt = albumFinalizedAt;
+    }
 
     public List<String> getGroomSide() {
         return groomSide;

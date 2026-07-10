@@ -22,6 +22,7 @@ import com.moments.models.BaseResponse;
 import com.moments.models.BulkEventRoleRequest;
 import com.moments.models.Event;
 import com.moments.models.EventRole;
+import com.moments.models.ReviewExportRequest;
 import com.moments.models.UserProfile;
 import com.moments.service.EventRoleService;
 import com.moments.service.EventService;
@@ -123,6 +124,79 @@ public class EventController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
         }
+    }
+
+    /** Photographer exports approved moments to the public client review page. Returns the shareable token. */
+    @PostMapping("/{eventId}/review/export")
+    public ResponseEntity<BaseResponse> exportToReview(@PathVariable String eventId,
+            @RequestBody ReviewExportRequest request) {
+        try {
+            if (request == null || request.getUserId() == null || request.getUserId().isBlank()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new BaseResponse("userId is required", HttpStatus.BAD_REQUEST, null));
+            }
+            Event event = eventService.exportToReview(eventId, request.getUserId());
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Exported to review", HttpStatus.OK, reviewInfo(event)));
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.FORBIDDEN, null));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Public: event meta for the review/album pages (no login). Safe subset only. */
+    @GetMapping("/review/{reviewToken}")
+    public ResponseEntity<BaseResponse> getReviewInfo(@PathVariable String reviewToken) {
+        try {
+            Event event = eventService.getEventByReviewToken(reviewToken);
+            if (event == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new BaseResponse("Invalid review token", HttpStatus.NOT_FOUND, null));
+            }
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Success", HttpStatus.OK, reviewInfo(event)));
+        } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Public (token-scoped): client marks their album selection final, unlocking the album page. */
+    @PostMapping("/review/{reviewToken}/finalize")
+    public ResponseEntity<BaseResponse> finalizeAlbum(@PathVariable String reviewToken) {
+        try {
+            Event event = eventService.finalizeAlbum(reviewToken);
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new BaseResponse("Album finalized", HttpStatus.OK, reviewInfo(event)));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.NOT_FOUND, null));
+        } catch (ExecutionException | InterruptedException e) {
+            log.error(e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new BaseResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
+
+    /** Safe, public-facing subset of an event for the review/album pages. */
+    private java.util.Map<String, Object> reviewInfo(Event event) {
+        java.util.Map<String, Object> info = new java.util.HashMap<>();
+        info.put("eventId", event.getEventId());
+        info.put("eventName", event.getEventName());
+        info.put("eventDate", event.getEventDate());
+        info.put("eventThumbnail", event.getEventThumbnail());
+        info.put("reviewToken", event.getReviewToken());
+        info.put("reviewEnabled", event.isReviewEnabled());
+        info.put("albumFinalized", event.isAlbumFinalized());
+        return info;
     }
 
     @GetMapping("/users/{id}")

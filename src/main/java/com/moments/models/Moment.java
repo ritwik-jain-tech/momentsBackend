@@ -29,6 +29,10 @@ public class Moment {
 
     private MomentStatus status;
 
+    /** Client (bride/groom) selection during delivery review. Firestore key {@code client_selection}. */
+    @PropertyName("client_selection")
+    private ClientSelection clientSelection;
+
     private long aspectRatio;
 
     private List<String> reportedBy = new ArrayList<>();
@@ -163,6 +167,16 @@ public class Moment {
 
     public void setStatus(MomentStatus status) {
         this.status = status;
+    }
+
+    @PropertyName("client_selection")
+    public ClientSelection getClientSelection() {
+        return clientSelection;
+    }
+
+    @PropertyName("client_selection")
+    public void setClientSelection(ClientSelection clientSelection) {
+        this.clientSelection = clientSelection;
     }
 
     public void setIsLiked(boolean b) {

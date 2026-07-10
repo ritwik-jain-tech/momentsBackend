@@ -198,6 +198,55 @@ public class EventService {
         return eventDao.getAllEvents();
     }
 
+    // ---- Delivery: client review + album ----------------------------------------------------
+
+    private boolean isMember(Event event, String userId) {
+        if (event == null || userId == null || userId.isBlank() || event.getUserIds() == null) {
+            return false;
+        }
+        String trimmed = userId.trim();
+        return event.getUserIds().stream()
+                .anyMatch(u -> u != null && u.trim().equals(trimmed));
+    }
+
+    /**
+     * Photographer exports approved moments to the public client review page. Generates the opaque
+     * {@code reviewToken} on first export and flips {@code reviewEnabled}. Idempotent — reuses an existing token.
+     */
+    public Event exportToReview(String eventId, String userId) throws ExecutionException, InterruptedException {
+        Event event = eventDao.getEventById(eventId);
+        if (event == null) {
+            throw new RuntimeException("Event not found with ID: " + eventId);
+        }
+        if (!isMember(event, userId)) {
+            throw new SecurityException("User is not a member of this event");
+        }
+        if (event.getReviewToken() == null || event.getReviewToken().isBlank()) {
+            event.setReviewToken(java.util.UUID.randomUUID().toString().replace("-", ""));
+        }
+        event.setReviewEnabled(true);
+        event.setReviewExportedAt(Instant.now().toEpochMilli());
+        eventDao.saveEvent(event);
+        return event;
+    }
+
+    /** Resolves the event behind a public review/album token (no login). Null if the token is unknown. */
+    public Event getEventByReviewToken(String reviewToken) throws ExecutionException, InterruptedException {
+        return eventDao.getEventByReviewToken(reviewToken);
+    }
+
+    /** Client marks their album selection as final; gates the public album page. */
+    public Event finalizeAlbum(String reviewToken) throws ExecutionException, InterruptedException {
+        Event event = eventDao.getEventByReviewToken(reviewToken);
+        if (event == null) {
+            throw new RuntimeException("Invalid review token");
+        }
+        event.setAlbumFinalized(true);
+        event.setAlbumFinalizedAt(Instant.now().toEpochMilli());
+        eventDao.saveEvent(event);
+        return event;
+    }
+
     /**
      * Events where {@code userIds} contains {@code userId} (same membership rule as storage overview).
      */
